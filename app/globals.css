@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+/* Dark mode is class-based (mirrors Kubikraum Digital): `dark:` utilities key
+   off a `.dark` class on <html>, set pre-paint by the theme script in
+   app/layout.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Semantic palette — kept in sync with the Kubikraum design system. */
+  --color-danger: #ef476f;
+  --color-warning: #ffd166;
+  --color-success: #06d6a0;
+  --color-info: #118ab2;
+  --color-info-deep: #073b4c;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Rendered Markdown (event bodies, legal pages). Mirrors the hand-written
+   styles of the Kubikraum Digital legal pages so DB content looks identical.
+   Colors are literal (Tailwind neutral scale) — Tailwind v4 only emits theme
+   variables that utilities actually use, so var(--color-neutral-*) is unsafe. */
+.md-content {
+  font-size: 0.875rem;
+  line-height: 1.625;
+  color: #525252; /* neutral-600 */
+}
+.dark .md-content {
+  color: #d4d4d4; /* neutral-300 */
+}
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+  font-weight: 600;
+  color: #171717; /* neutral-900 */
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+.md-content h1 {
+  font-size: 1.125rem;
+}
+.md-content h2 {
+  font-size: 1rem;
+}
+.md-content h3 {
+  font-size: 0.875rem;
+}
+.dark .md-content h1,
+.dark .md-content h2,
+.dark .md-content h3 {
+  color: #f5f5f5; /* neutral-100 */
+}
+.md-content h1:first-child,
+.md-content h2:first-child,
+.md-content h3:first-child {
+  margin-top: 0;
+}
+.md-content p {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.md-content ul,
+.md-content ol {
+  margin: 0.5rem 0 0.5rem 1.25rem;
+}
+.md-content ul {
+  list-style: disc;
+}
+.md-content ol {
+  list-style: decimal;
+}
+.md-content li {
+  margin: 0.25rem 0;
+}
+.md-content a {
+  color: #118ab2; /* info */
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-content a:hover {
+  color: #073b4c; /* info-deep */
+}
+.dark .md-content a:hover {
+  color: #118ab2;
+}
+.md-content strong {
+  font-weight: 600;
+  color: #171717;
+}
+.dark .md-content strong {
+  color: #f5f5f5;
+}
+.md-content hr {
+  margin: 1.5rem 0;
+  border-color: #e5e5e5; /* neutral-200 */
+}
+.dark .md-content hr {
+  border-color: #262626; /* neutral-800 */
+}
+.md-content blockquote {
+  margin: 0.75rem 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid #d4d4d4; /* neutral-300 */
+}
+.dark .md-content blockquote {
+  border-left-color: #404040; /* neutral-700 */
+}

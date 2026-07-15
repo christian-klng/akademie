@@ -1,0 +1,59 @@
+# Standalone stack for Coolify (or plain `docker compose up`).
+# Coolify injects env vars from its UI — but ONLY into services whose
+# `environment:` block references them. Every var the app needs is therefore
+# listed explicitly below. The ${VAR:-default} fallbacks let the stack run
+# locally without a .env file.
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-akademie}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-akademie}
+      POSTGRES_DB: ${POSTGRES_DB:-akademie}
+    volumes:
+      # postgres:18 images moved the volume mount point: data now lives under
+      # /var/lib/postgresql/<major>/docker. Mounting the old …/data path would
+      # write the cluster OUTSIDE the volume (data loss on container recreate).
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-akademie}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: applies the drizzle schema (push --force) and runs the idempotent
+  # seed (first admin from ADMIN_EMAIL/ADMIN_PASSWORD, static pages, sample event).
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-only-session-secret-change-me}
+      SITE_URL: ${SITE_URL:-https://akademie.kubikraum.digital}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+
+volumes:
+  db-data:
