@@ -45,3 +45,29 @@ COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
+
+# ---- railway: runner + migration toolkit, MUST stay the LAST stage ----
+# Railway builds the last stage of the Dockerfile. Its pre-deploy command
+# (`npm run migrate`, see railway.json) runs in a separate container from THIS
+# image, so drizzle-kit + schema + seed have to be inside it. The full
+# node_modules is a superset of the pruned standalone one, so overlaying it
+# is safe. Coolify/GH-Actions keep using the slim `runner` via --target.
+FROM node:24-slim AS railway
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json drizzle.config.ts ./
+COPY --chown=node:node lib ./lib
+COPY --chown=node:node scripts ./scripts
+
+USER node
+EXPOSE 3000
+CMD ["node", "server.js"]

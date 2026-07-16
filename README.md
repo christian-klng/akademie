@@ -75,6 +75,28 @@ Einmalige Einrichtung:
 6. Nach jeder Env-Änderung **redeployen/neustarten** (Node liest `process.env`
    nur beim Start).
 
+## Deploy auf Railway (Alternative)
+
+Railway baut direkt aus dem GitHub-Repo: Das `Dockerfile` wird automatisch
+erkannt, gebaut wird immer dessen **letzte** Stage (`railway` = Standalone-App
+plus Migrations-Werkzeug). `railway.json` steuert den Rest — insbesondere läuft
+`npm run migrate` vor jedem Deploy automatisch als **Pre-Deploy-Command**.
+Einen separaten `migrate`-Service wie bei Coolify gibt es nicht.
+
+1. Auf railway.com ein Projekt anlegen → **Deploy from GitHub repo** →
+   `christian-klng/akademie` (Auto-Deploy bei Push ist damit inklusive).
+2. **Postgres hinzufügen:** im Projekt-Canvas „Create“ → „Database“ →
+   „Add PostgreSQL“.
+3. **Variablen** auf dem App-Service setzen:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (Referenz auf den
+     Postgres-Service, nutzt das interne Netz)
+   - `SESSION_SECRET` (`openssl rand -base64 32`)
+   - `ADMIN_EMAIL` + `ADMIN_PASSWORD` (erster Admin, nur beim ersten Seed)
+   - `SITE_URL` = öffentliche URL aus Schritt 4
+4. **Domain:** App-Service → Settings → Networking → „Generate Domain“
+   (Ziel-Port 3000) oder Custom Domain per CNAME; danach `SITE_URL` anpassen.
+5. Fertig — jeder Push deployt: bauen → `npm run migrate` → App starten.
+
 ### Hinweise
 
 - **Postgres 18:** Das Volume ist auf `/var/lib/postgresql` gemountet (nicht

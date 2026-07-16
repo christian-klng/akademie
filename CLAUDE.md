@@ -67,6 +67,13 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   sein**, sonst injiziert Coolify sie nicht. Nach Env-Änderung redeployen.
 - **Postgres-18-Image:** Volume-Mount ist `/var/lib/postgresql` (NICHT
   `…/data`) — Daten liegen unter `/var/lib/postgresql/18/docker`.
+- **Railway-Alternative:** `railway.json` + Dockerfile-Stage `railway`
+  (Standalone-Runner + volle node_modules für drizzle-kit/Seed). Railway baut
+  immer die LETZTE Dockerfile-Stage — `railway` muss die letzte bleiben,
+  nie Stages dahinter anhängen. Migration+Seed laufen als Pre-Deploy-Command
+  (`npm run migrate`) in einem separaten Container mit dem App-Image;
+  DB kommt als Railway-Postgres-Service (`DATABASE_URL` =
+  `${{Postgres.DATABASE_URL}}`-Referenz), kein `migrate`-Service nötig.
 
 ## Konventionen
 
