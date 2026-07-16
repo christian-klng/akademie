@@ -1,0 +1,74 @@
+# Builds the two Docker images (web + migrate) on every push to main and
+# pushes them to the GitHub Container Registry. Coolify no longer builds
+# anything itself — docker-compose.yml references these images (`image:`
+# instead of `build:`), so a deploy on the server is just a pull + up.
+#
+# Optional repo secrets for auto-redeploy after a successful build:
+#   COOLIFY_WEBHOOK — the app's deploy webhook URL (Coolify → app → Webhooks)
+#   COOLIFY_TOKEN   — Coolify API token (Keys & Tokens → API tokens)
+# Without them the workflow still builds; trigger the deploy manually in Coolify.
+
+name: build-images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push web image (target runner)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runner
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-web:latest
+            ghcr.io/${{ github.repository }}-web:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push migrate image (target migrator)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: migrator
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-migrate:latest
+            ghcr.io/${{ github.repository }}-migrate:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trigger Coolify redeploy (optional)
+        env:
+          COOLIFY_WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          if [ -z "$COOLIFY_WEBHOOK" ]; then
+            echo "Secret COOLIFY_WEBHOOK not set — trigger the deploy manually in Coolify."
+            exit 0
+          fi
+          curl -fsS "$COOLIFY_WEBHOOK" -H "Authorization: Bearer $COOLIFY_TOKEN"

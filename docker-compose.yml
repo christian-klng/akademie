@@ -1,4 +1,7 @@
-# Standalone stack for Coolify (or plain `docker compose up`).
+# Stack for Coolify. The web/migrate images are built by GitHub Actions
+# (.github/workflows/build-images.yml) and pushed to ghcr.io — Coolify only
+# pulls them, the server never compiles anything. To build locally instead:
+# `docker build --target runner -t akademie-web .` (or `--target migrator`).
 # Coolify injects env vars from its UI — but ONLY into services whose
 # `environment:` block references them. Every var the app needs is therefore
 # listed explicitly below. The ${VAR:-default} fallbacks let the stack run
@@ -26,9 +29,7 @@ services:
   # One-shot: applies the drizzle schema (push --force) and runs the idempotent
   # seed (first admin from ADMIN_EMAIL/ADMIN_PASSWORD, static pages, sample event).
   migrate:
-    build:
-      context: .
-      target: migrator
+    image: ghcr.io/christian-klng/akademie-migrate:latest
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
@@ -39,9 +40,7 @@ services:
     restart: "no"
 
   web:
-    build:
-      context: .
-      target: runner
+    image: ghcr.io/christian-klng/akademie-web:latest
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}

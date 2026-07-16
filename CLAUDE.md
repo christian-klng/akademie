@@ -54,8 +54,14 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   `readField` (`lib/form.ts`) lesen — defensiv gegen Reacts
   `_N_<name>`-Wire-Prefix.
 
-## Deployment (Coolify)
+## Deployment (Coolify + GitHub Actions)
 
+- **Images baut GitHub Actions** (`.github/workflows/build-images.yml`): Push
+  auf `main` → `ghcr.io/christian-klng/akademie-web` und `…-migrate` →
+  Workflow triggert den Coolify-Deploy-Webhook. Coolify pullt nur
+  (`image:` in `docker-compose.yml`), der Server baut nie selbst (4-GB-Box,
+  `next build` würde sie in den Swap drücken). Auto-Deploy-on-Push in
+  Coolify muss AUS bleiben, sonst deployt Coolify, bevor das Image fertig ist.
 - Eine Compose-Resource; Domain auf `web` (Port 3000), HTTPS.
 - **Jede Env-Var muss im `environment:`-Block des Services referenziert
   sein**, sonst injiziert Coolify sie nicht. Nach Env-Änderung redeployen.

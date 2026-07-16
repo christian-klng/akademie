@@ -45,17 +45,34 @@ ausführen (`npm run seed`).
 - `npm run seed` — idempotenter Seed (Admin, statische Seiten, Beispiel-Event)
 - `npm run migrate` — `db:push --force` + Seed (läuft im `migrate`-Container)
 
-## Deploy auf Coolify
+## Deploy (GitHub Actions baut, Coolify pullt)
+
+Der Server baut nichts selbst: Bei jedem Push auf `main` baut
+`.github/workflows/build-images.yml` die Images
+`ghcr.io/christian-klng/akademie-web` und `…-migrate`, pusht sie in die
+GitHub Container Registry und stößt (falls die Secrets `COOLIFY_WEBHOOK` +
+`COOLIFY_TOKEN` gesetzt sind) den Coolify-Deploy an. Coolify macht nur noch
+`pull` + `up`.
+
+Einmalige Einrichtung:
 
 1. Repo als **Docker-Compose-Resource** anlegen (dieses Verzeichnis enthält
    `docker-compose.yml`: `db` + einmaliges `migrate` + `web`).
-2. **Domain** auf den `web`-Service legen (Port 3000), HTTPS aktivieren.
-3. **Env-Variablen** in der Coolify-UI setzen (siehe `.env.example`):
+   **Auto-Deploy bei Push ausschalten** — deployt wird erst, wenn der
+   Actions-Workflow das Image fertig gepusht hat.
+2. Nach dem ersten Workflow-Lauf die beiden GHCR-Pakete (`akademie-web`,
+   `akademie-migrate`) auf **public** stellen (GitHub → Packages → Package
+   settings → Change visibility), sonst kann der Server sie nicht pullen.
+3. **Domain** auf den `web`-Service legen (Port 3000), HTTPS aktivieren.
+4. **Env-Variablen** in der Coolify-UI setzen (siehe `.env.example`):
    `POSTGRES_PASSWORD`, `SESSION_SECRET`, `SITE_URL`, `ADMIN_EMAIL`,
    `ADMIN_PASSWORD`. Wichtig: Coolify injiziert eine UI-Variable nur, wenn der
    Service sie im `environment:`-Block referenziert — alle nötigen Variablen
    sind dort bereits verdrahtet.
-4. Nach jeder Env-Änderung **redeployen/neustarten** (Node liest `process.env`
+5. Für automatisches Redeploy: in Coolify die **Deploy-Webhook-URL** der App
+   (Tab „Webhooks“) und ein **API-Token** (Keys & Tokens) erzeugen und als
+   GitHub-Repo-Secrets `COOLIFY_WEBHOOK` / `COOLIFY_TOKEN` hinterlegen.
+6. Nach jeder Env-Änderung **redeployen/neustarten** (Node liest `process.env`
    nur beim Start).
 
 ### Hinweise

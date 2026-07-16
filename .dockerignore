@@ -1,0 +1,10 @@
+# Keep the build context lean: only source files reach `COPY . .`.
+.git
+.github
+node_modules
+.next
+.env
+.env*.local
+Dockerfile
+docker-compose.yml
+.dockerignore
