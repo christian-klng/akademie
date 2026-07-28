@@ -46,6 +46,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
       SESSION_SECRET: ${SESSION_SECRET:-dev-only-session-secret-change-me}
       SITE_URL: ${SITE_URL:-https://akademie.kubikraum.digital}
+      # Quiz evaluation via Cortecs AI. Empty default on purpose: without a key
+      # the quiz reports "nicht verfügbar" instead of erroring per answer.
+      CORTECS_API_KEY: ${CORTECS_API_KEY:-}
+      CORTECS_MODEL: ${CORTECS_MODEL:-claude-haiku-4-5}
     depends_on:
       db:
         condition: service_healthy

@@ -30,6 +30,9 @@ export function SiteHeader() {
         </span>
       </Link>
       <div className="flex items-center gap-3 text-sm">
+        <Link href="/quizzes" className="font-medium hover:underline">
+          Quizzes
+        </Link>
         <ThemeToggle />
         <Link
           href="/login"
