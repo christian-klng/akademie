@@ -62,6 +62,14 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   (`image:` in `docker-compose.yml`), der Server baut nie selbst (4-GB-Box,
   `next build` würde sie in den Swap drücken). Auto-Deploy-on-Push in
   Coolify muss AUS bleiben, sonst deployt Coolify, bevor das Image fertig ist.
+- **`web` und `migrate` tragen `pull_policy: always`.** Beide zeigen auf den
+  wandernden Tag `:latest`. Ohne diese Zeile benutzt `compose up` das lokal
+  schon vorhandene Image weiter und deployt still den alten Stand — während
+  Coolify in der Oberfläche den aktuellen Commit anzeigt, weil von dort nur
+  die `docker-compose.yml` stammt. Symptom: Deploy „erfolgreich", Seite alt.
+  `db` bekommt das bewusst NICHT (Datenbank soll nicht ungefragt hochziehen).
+  Der Workflow taggt zusätzlich mit der Commit-SHA — die eignet sich, wenn
+  ein Deploy exakt festgenagelt werden soll.
 - Eine Compose-Resource; Domain auf `web` (Port 3000), HTTPS.
 - **Jede Env-Var muss im `environment:`-Block des Services referenziert
   sein**, sonst injiziert Coolify sie nicht. Nach Env-Änderung redeployen.

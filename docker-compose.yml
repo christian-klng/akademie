@@ -10,6 +10,9 @@
 services:
   db:
     image: postgres:18
+    # Deliberately NO `pull_policy: always` here (unlike web/migrate): pulling a
+    # new Postgres patch release on every deploy is not something a database
+    # should do unattended. Update this one on purpose.
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-akademie}
@@ -30,6 +33,10 @@ services:
   # seed (first admin from ADMIN_EMAIL/ADMIN_PASSWORD, static pages, sample event).
   migrate:
     image: ghcr.io/christian-klng/akademie-migrate:latest
+    # `latest` is a moving tag: once the host has pulled it, `compose up` reuses
+    # the cached copy and never sees a newer push. That silently deploys stale
+    # code while the UI still reports the current commit. Always pull instead.
+    pull_policy: always
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
@@ -41,6 +48,8 @@ services:
 
   web:
     image: ghcr.io/christian-klng/akademie-web:latest
+    # Same moving-tag problem as `migrate` above.
+    pull_policy: always
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
