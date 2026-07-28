@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { ArrowRight, Check, X } from "lucide-react";
+import { ArrowRight, Check, Info, X } from "lucide-react";
 import type { QuizFrage } from "@/lib/quizzes/types";
 import {
   bewerteAntwort,
@@ -33,6 +33,10 @@ export function QuizQuestion({
 
   const bewertung = state.bewertung;
   const letzteFrage = nummer === anzahl;
+  const loesungId = `beispiel-loesung-${frage.id}`;
+  const loesungLabel = loesungOffen
+    ? "Beispiel-Lösung ausblenden"
+    : "Beispiel-Lösung ansehen";
 
   return (
     <div>
@@ -145,16 +149,24 @@ export function QuizQuestion({
             {bewertung.tipp}
           </p>
 
+          {/* Icon-only toggle: the label lives in aria-label and title, so the
+              button still has an accessible name and a hover tooltip. */}
           <button
             type="button"
             onClick={() => setLoesungOffen((o) => !o)}
-            className="mt-4 text-sm text-neutral-500 underline"
+            className="mt-4 inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-300 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
             aria-expanded={loesungOffen}
+            aria-controls={loesungId}
+            aria-label={loesungLabel}
+            title={loesungLabel}
           >
-            {loesungOffen ? "Beispiel-Lösung ausblenden" : "Beispiel-Lösung ansehen"}
+            <Info className="h-4 w-4" aria-hidden />
           </button>
           {loesungOffen && (
-            <p className="mt-2 rounded-lg bg-neutral-100 p-3 text-sm whitespace-pre-line dark:bg-neutral-900">
+            <p
+              id={loesungId}
+              className="mt-2 rounded-lg bg-neutral-100 p-3 text-sm whitespace-pre-line dark:bg-neutral-900"
+            >
               {frage.beispielLoesung}
             </p>
           )}
