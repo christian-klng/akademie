@@ -55,6 +55,16 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
       SESSION_SECRET: ${SESSION_SECRET:-dev-only-session-secret-change-me}
       SITE_URL: ${SITE_URL:-https://kubikraum.academy}
+      # Registration mails. Empty SMTP_HOST on purpose: the app then logs the
+      # mail instead of failing, so a sign-up is never lost to a mail outage.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      NOTIFY_EMAIL: ${NOTIFY_EMAIL:-}
+      # Stripe webhook signing secret — only needed for paid events.
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       # Quiz evaluation via Cortecs AI. Empty default on purpose: without a key
       # the quiz reports "nicht verfügbar" instead of erroring per answer.
       CORTECS_API_KEY: ${CORTECS_API_KEY:-}

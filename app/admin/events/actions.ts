@@ -6,6 +6,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { readField } from "@/lib/form";
 import { parseDatetimeLocalValue, slugify } from "@/lib/format";
+import { countTakenSeats } from "@/lib/queries";
 
 export type EventFormState = { error?: string };
 
@@ -19,7 +20,12 @@ export async function saveEvent(
   const teaser = readField(formData, "teaser").trim();
   const body = readField(formData, "body");
   const location = readField(formData, "location").trim();
+  const format = readField(formData, "format") === "online" ? "online" : "vor_ort";
+  const onlineUrl = readField(formData, "onlineUrl").trim();
   const price = readField(formData, "price").trim();
+  const capacityRaw = readField(formData, "capacity").trim();
+  const stripeCheckoutUrl = readField(formData, "stripeCheckoutUrl").trim();
+  const registrationOpen = readField(formData, "registrationOpen") === "on";
   const startsAt = parseDatetimeLocalValue(readField(formData, "startsAt"));
   const endsAt = parseDatetimeLocalValue(readField(formData, "endsAt"));
   const published = readField(formData, "published") === "on";
@@ -30,6 +36,32 @@ export async function saveEvent(
   if (!startsAt) return { error: "Bitte gib an, wann das Event beginnt." };
   if (endsAt && endsAt <= startsAt)
     return { error: "Das Ende muss nach dem Beginn liegen." };
+
+  // Empty means "unlimited", so only a filled field has to be a sane number.
+  let capacity: number | null = null;
+  if (capacityRaw) {
+    const n = Number(capacityRaw);
+    if (!Number.isInteger(n) || n < 1)
+      return { error: "Die Zahl der Plätze muss eine ganze Zahl ab 1 sein." };
+    capacity = n;
+  }
+
+  for (const [value, label] of [
+    [onlineUrl, "Der Zugangslink"],
+    [stripeCheckoutUrl, "Der Stripe-Zahlungslink"],
+  ] as const) {
+    if (value && !value.startsWith("https://"))
+      return { error: `${label} muss mit https:// beginnen.` };
+  }
+
+  // Seats already handed out can't be taken away by editing the number down.
+  if (id && capacity !== null) {
+    const taken = await countTakenSeats(id);
+    if (capacity < taken)
+      return {
+        error: `Es sind schon ${taken} Plätze vergeben. Weniger als ${taken} Plätze gehen nicht.`,
+      };
+  }
 
   // The slug is the public URL — it must stay unique.
   const clash = await db
@@ -52,7 +84,12 @@ export async function saveEvent(
     teaser,
     body,
     location,
+    format,
+    onlineUrl,
     price,
+    capacity,
+    stripeCheckoutUrl,
+    registrationOpen,
     startsAt,
     endsAt,
     published,

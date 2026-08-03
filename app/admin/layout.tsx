@@ -43,6 +43,12 @@ export default function AdminLayout({
               Veranstaltungen
             </Link>
             <Link
+              href="/admin/anmeldungen"
+              className="text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+            >
+              Anmeldungen
+            </Link>
+            <Link
               href="/admin/pages"
               className="text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
             >

@@ -106,17 +106,31 @@ Beim Besuch dieser Website verarbeitet der Server automatisch technische Daten (
 
 ## 3. Anmeldung zu Veranstaltungen
 
-Wenn du dich per E-Mail zu einer Veranstaltung anmeldest, verarbeiten wir die Angaben aus deiner E-Mail (Name, E-Mail-Adresse, Nachricht), um deine Anmeldung zu bearbeiten. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertragsanbahnung).
+Wenn du dich über das Formular auf einer Veranstaltungsseite anmeldest, verarbeiten wir deinen Namen, deine E-Mail-Adresse, deine optionale Nachricht und den Zeitpunkt der Anmeldung. Wir speichern diese Angaben in unserer Datenbank, um deine Anmeldung zu bearbeiten, dir eine Bestätigung zu schicken und die Teilnehmerliste zu führen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertrag und Vertragsanbahnung).
 
-## 4. Cookies
+**[Bitte ergänzen: Wie lange werden Anmeldedaten nach der Veranstaltung aufbewahrt?]**
+
+## 4. Bezahlung über Stripe
+
+Kostenpflichtige Veranstaltungen bezahlst du über den Zahlungsdienstleister Stripe (Stripe Payments Europe, Ltd., Dublin, Irland). Wenn du auf „Anmelden und bezahlen" klickst, wirst du zu Stripe weitergeleitet; deine Zahlungsdaten gibst du dort ein, wir sehen sie nie. Stripe meldet uns nur zurück, dass deine Zahlung erfolgreich war. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO.
+
+**[Bitte ergänzen: Auftragsverarbeitung bzw. Standardvertragsklauseln mit Stripe]**
+
+## 5. E-Mail-Versand
+
+Bestätigungen und Hinweise zu deiner Anmeldung verschicken wir per E-Mail über unseren Mail-Anbieter. Dabei werden deine E-Mail-Adresse und der Inhalt der Nachricht übertragen.
+
+**[Bitte ergänzen: Name des Mail-Anbieters und Auftragsverarbeitung]**
+
+## 6. Cookies
 
 Diese Website verwendet keine Tracking-Cookies. Es wird lediglich eine technisch notwendige Einstellung (z. B. dein gewähltes Farbschema) lokal in deinem Browser gespeichert.
 
-## 5. Deine Rechte
+## 7. Deine Rechte
 
 Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch. Wende dich dazu einfach per E-Mail an uns. Außerdem hast du das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.
 
-## 6. Speicherdauer
+## 8. Speicherdauer
 
 Wir speichern personenbezogene Daten nur so lange, wie es für die genannten Zwecke nötig ist oder gesetzliche Aufbewahrungspflichten bestehen.
 
@@ -133,11 +147,15 @@ Diese Allgemeinen Geschäftsbedingungen gelten für alle Weiterbildungs-Angebote
 
 ## § 2 Anmeldung und Vertragsschluss
 
-Die Anmeldung zu einer Veranstaltung erfolgt per E-Mail. Der Vertrag kommt zustande, wenn wir deine Anmeldung per E-Mail bestätigen.
+Die Anmeldung zu einer Veranstaltung erfolgt über das Anmeldeformular auf der jeweiligen Veranstaltungsseite. Der Vertrag kommt zustande, wenn wir deine Anmeldung per E-Mail bestätigen.
+
+Die Zahl der Plätze ist begrenzt. Sind alle Plätze vergeben, kannst du dich auf die Warteliste setzen lassen. Ein Anspruch auf einen Platz entsteht dadurch nicht — wir melden uns, sobald ein Platz frei wird.
 
 ## § 3 Preise und Bezahlung
 
-Es gelten die Preise, die bei der jeweiligen Veranstaltung angegeben sind. **[Bitte ergänzen: Zahlungsweise und Zahlungsziel]**
+Es gelten die Preise, die bei der jeweiligen Veranstaltung angegeben sind. Kostenpflichtige Veranstaltungen bezahlst du direkt bei der Anmeldung über unseren Zahlungsdienstleister Stripe. Dein Platz ist verbindlich reserviert, sobald die Zahlung bei uns eingegangen ist.
+
+**[Bitte ergänzen: Zahlungsziel und Vorgehen bei nicht abgeschlossener Zahlung]**
 
 ## § 4 Rücktritt und Stornierung
 

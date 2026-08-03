@@ -8,6 +8,8 @@
 //
 // Kept on globalThis so `next dev`'s module reloading doesn't clear it.
 
+import { headers } from "next/headers";
+
 type Bucket = number[];
 
 const store: Map<string, Bucket> = ((
@@ -50,4 +52,12 @@ export function rateLimit(
   }
 
   return { allowed: true, retryAfterS: 0 };
+}
+
+/** First entry of x-forwarded-for; the proxy appends, so [0] is the client. */
+export async function clientIp(): Promise<string> {
+  const h = await headers();
+  const xff = h.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0].trim();
+  return h.get("x-real-ip")?.trim() || "unbekannt";
 }

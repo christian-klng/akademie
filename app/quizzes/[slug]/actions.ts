@@ -1,11 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { readField } from "@/lib/form";
 import { getFrage } from "@/lib/quizzes";
 import { getAuswertung, USER_MESSAGE_TEMPLATE } from "@/lib/quizzes/evaluation";
 import { holeBewertung, hatCortecsKey } from "@/lib/cortecs";
-import { rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { baueBewertung } from "@/lib/quizzes/bewertung";
 import type { Bewertung } from "@/lib/quizzes/types";
 
@@ -17,14 +16,6 @@ export type BewertungState = {
 const MAX_ANTWORT_LAENGE = 2000;
 const LIMIT = 20;
 const FENSTER_MS = 10 * 60 * 1000;
-
-/** First entry of x-forwarded-for; the proxy appends, so [0] is the client. */
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  const xff = h.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return h.get("x-real-ip")?.trim() || "unbekannt";
-}
 
 export async function bewerteAntwort(
   _prev: BewertungState,

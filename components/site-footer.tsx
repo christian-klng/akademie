@@ -32,6 +32,12 @@ export function SiteFooter() {
           </p>
           <nav className="flex items-center gap-5">
             <Link
+              href="/events"
+              className="transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
+            >
+              Termine
+            </Link>
+            <Link
               href="/agb"
               className="transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
             >

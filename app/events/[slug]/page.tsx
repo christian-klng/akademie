@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CalendarDays, Mail, MapPin, Ticket } from "lucide-react";
+import { CalendarDays, Mail, MapPin, Ticket, Users } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { getPublishedEvent } from "@/lib/queries";
+import {
+  getPublishedEvent,
+  getSeatInfo,
+  hasEventStarted,
+  isRegistrationOpen,
+} from "@/lib/queries";
 import { renderMarkdown } from "@/lib/markdown";
 import {
   formatEventDate,
@@ -11,6 +16,7 @@ import {
   toNaiveIso,
 } from "@/lib/format";
 import { SITE_NAME, SITE_URL, SUPPORT_EMAIL } from "@/lib/site";
+import { RegistrationForm } from "./registration-form";
 
 export const dynamic = "force-dynamic";
 
@@ -64,8 +70,12 @@ export default async function EventPage({
     inLanguage: "de",
   };
 
+  const seats = await getSeatInfo(event);
+  const registrationOpen = isRegistrationOpen(event);
+  const started = hasEventStarted(event);
+
   const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
-    `Anmeldung: ${event.title}`,
+    `Frage zu: ${event.title}`,
   )}`;
 
   return (
@@ -84,16 +94,24 @@ export default async function EventPage({
             {formatEventDate(event.startsAt)} ·{" "}
             {formatEventTime(event.startsAt, event.endsAt)}
           </span>
-          {event.location && (
+          {(event.location || event.format === "online") && (
             <span className="inline-flex items-center gap-2">
               <MapPin className="h-4 w-4 shrink-0" aria-hidden />
-              {event.location}
+              {event.location || "Online"}
             </span>
           )}
           {event.price && (
             <span className="inline-flex items-center gap-2">
               <Ticket className="h-4 w-4 shrink-0" aria-hidden />
               {event.price}
+            </span>
+          )}
+          {seats.capacity !== null && registrationOpen && (
+            <span className="inline-flex items-center gap-2">
+              <Users className="h-4 w-4 shrink-0" aria-hidden />
+              {seats.isFull
+                ? "Alle Plätze sind vergeben"
+                : `Noch ${seats.free} von ${seats.capacity} Plätzen frei`}
             </span>
           )}
         </div>
@@ -111,20 +129,40 @@ export default async function EventPage({
         />
 
         <div className="mt-12 rounded-xl border border-neutral-300 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-950">
-          <h2 className="text-base font-semibold tracking-tight">
-            Möchtest du dabei sein?
-          </h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Schreib uns einfach eine E-Mail. Wir melden uns schnell bei dir —
-            versprochen.
-          </p>
-          <a
-            href={mailto}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-          >
-            <Mail className="h-4 w-4" aria-hidden />
-            Per E-Mail anmelden
-          </a>
+          {registrationOpen ? (
+            <>
+              <h2 className="text-base font-semibold tracking-tight">
+                {seats.isFull ? "Alle Plätze sind vergeben" : "Möchtest du dabei sein?"}
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                {seats.isFull
+                  ? "Trag dich auf die Warteliste ein. Wir melden uns, sobald ein Platz frei wird."
+                  : "Melde dich hier an. Du bekommst gleich eine E-Mail von uns."}
+              </p>
+              <RegistrationForm
+                slug={event.slug}
+                isFull={seats.isFull}
+                isPaid={Boolean(event.stripeCheckoutUrl)}
+              />
+            </>
+          ) : (
+            <>
+              <h2 className="text-base font-semibold tracking-tight">
+                {started ? "Dieser Termin ist vorbei" : "Die Anmeldung ist geschlossen"}
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Du hast Interesse an diesem Thema? Schreib uns eine E-Mail, dann
+                sagen wir dir Bescheid, wenn es einen neuen Termin gibt.
+              </p>
+              <a
+                href={mailto}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+              >
+                <Mail className="h-4 w-4" aria-hidden />
+                E-Mail schreiben
+              </a>
+            </>
+          )}
         </div>
       </main>
 

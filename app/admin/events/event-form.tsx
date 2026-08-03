@@ -10,7 +10,12 @@ export type EventFormValues = {
   teaser: string;
   body: string;
   location: string;
+  format: string; // "online" | "vor_ort"
+  onlineUrl: string;
   price: string;
+  capacity: string; // empty = unlimited
+  stripeCheckoutUrl: string;
+  registrationOpen: boolean;
   startsAt: string; // datetime-local value
   endsAt: string;
   published: boolean;
@@ -90,6 +95,32 @@ export function EventForm({ initial }: { initial: EventFormValues }) {
         </div>
       </div>
 
+      <fieldset className="space-y-2">
+        <legend className={labelClass}>Wie findet es statt?</legend>
+        <div className="flex gap-5 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="format"
+              value="vor_ort"
+              defaultChecked={initial.format !== "online"}
+              className="h-4 w-4 accent-neutral-900 dark:accent-white"
+            />
+            Vor Ort
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="format"
+              value="online"
+              defaultChecked={initial.format === "online"}
+              className="h-4 w-4 accent-neutral-900 dark:accent-white"
+            />
+            Online
+          </label>
+        </div>
+      </fieldset>
+
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label htmlFor="location" className={labelClass}>
@@ -116,6 +147,62 @@ export function EventForm({ initial }: { initial: EventFormValues }) {
             placeholder='z. B. "149 € pro Person" oder "kostenlos"'
             className={inputClass}
           />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="onlineUrl" className={labelClass}>
+          Zugangslink (nur bei Online)
+        </label>
+        <input
+          id="onlineUrl"
+          name="onlineUrl"
+          type="url"
+          defaultValue={initial.onlineUrl}
+          placeholder="https://zoom.us/j/…"
+          className={inputClass}
+        />
+        <p className={hintClass}>
+          Steht nie auf der Website. Er geht nur per E-Mail an Menschen, die
+          einen Platz haben.
+        </p>
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label htmlFor="capacity" className={labelClass}>
+            Plätze
+          </label>
+          <input
+            id="capacity"
+            name="capacity"
+            type="number"
+            min={1}
+            step={1}
+            defaultValue={initial.capacity}
+            placeholder="leer = unbegrenzt"
+            className={inputClass}
+          />
+          <p className={hintClass}>
+            Sind alle Plätze weg, landen weitere Anmeldungen auf der Warteliste.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="stripeCheckoutUrl" className={labelClass}>
+            Stripe-Zahlungslink
+          </label>
+          <input
+            id="stripeCheckoutUrl"
+            name="stripeCheckoutUrl"
+            type="url"
+            defaultValue={initial.stripeCheckoutUrl}
+            placeholder="https://buy.stripe.com/…"
+            className={inputClass}
+          />
+          <p className={hintClass}>
+            Leer lassen = kostenloses Event. Mit Link wird nach der Anmeldung zu
+            Stripe weitergeleitet.
+          </p>
         </div>
       </div>
 
@@ -153,15 +240,26 @@ export function EventForm({ initial }: { initial: EventFormValues }) {
         </p>
       </div>
 
-      <label className="flex items-center gap-2.5 text-sm font-medium">
-        <input
-          type="checkbox"
-          name="published"
-          defaultChecked={initial.published}
-          className="h-4 w-4 accent-neutral-900 dark:accent-white"
-        />
-        Öffentlich sichtbar
-      </label>
+      <div className="space-y-3">
+        <label className="flex items-center gap-2.5 text-sm font-medium">
+          <input
+            type="checkbox"
+            name="published"
+            defaultChecked={initial.published}
+            className="h-4 w-4 accent-neutral-900 dark:accent-white"
+          />
+          Öffentlich sichtbar
+        </label>
+        <label className="flex items-center gap-2.5 text-sm font-medium">
+          <input
+            type="checkbox"
+            name="registrationOpen"
+            defaultChecked={initial.registrationOpen}
+            className="h-4 w-4 accent-neutral-900 dark:accent-white"
+          />
+          Anmeldung möglich
+        </label>
+      </div>
 
       {state.error && (
         <p className="text-sm text-danger" role="alert">

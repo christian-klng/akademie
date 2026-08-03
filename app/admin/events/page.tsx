@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { ChevronRight, Plus } from "lucide-react";
 import { db, schema } from "@/lib/db";
 import { formatShortDate } from "@/lib/format";
@@ -11,6 +11,14 @@ export default async function AdminEventsPage() {
     .select()
     .from(schema.event)
     .orderBy(desc(schema.event.startsAt));
+
+  // Taken seats for every event in one query instead of one per row.
+  const seatRows = await db
+    .select({ eventId: schema.registration.eventId, n: count() })
+    .from(schema.registration)
+    .where(eq(schema.registration.status, "angemeldet"))
+    .groupBy(schema.registration.eventId);
+  const taken = new Map(seatRows.map((r) => [r.eventId, r.n]));
 
   return (
     <div>
@@ -43,7 +51,9 @@ export default async function AdminEventsPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{e.title}</p>
                     <p className="mt-0.5 text-xs text-neutral-500">
-                      {formatShortDate(e.startsAt)} · /events/{e.slug}
+                      {formatShortDate(e.startsAt)} · /events/{e.slug} ·{" "}
+                      {taken.get(e.id) ?? 0}
+                      {e.capacity === null ? "" : `/${e.capacity}`} angemeldet
                     </p>
                   </div>
                   <span className="flex shrink-0 items-center gap-3">

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt } from "drizzle-orm";
 import { db, schema } from "./db";
 import type { Event, StaticPage } from "./schema";
 
@@ -42,6 +42,73 @@ export async function listPublishedEvents(): Promise<Event[]> {
     .from(schema.event)
     .where(eq(schema.event.published, true))
     .orderBy(asc(schema.event.startsAt));
+}
+
+/** Published events that are still ahead, soonest first. */
+export async function listUpcomingEvents(): Promise<Event[]> {
+  return db
+    .select()
+    .from(schema.event)
+    .where(
+      and(eq(schema.event.published, true), gte(schema.event.startsAt, new Date())),
+    )
+    .orderBy(asc(schema.event.startsAt));
+}
+
+/** Published events whose date has passed, most recent first. */
+export async function listPastEvents(): Promise<Event[]> {
+  return db
+    .select()
+    .from(schema.event)
+    .where(
+      and(eq(schema.event.published, true), lt(schema.event.startsAt, new Date())),
+    )
+    .orderBy(desc(schema.event.startsAt));
+}
+
+/** Seats taken: confirmed sign-ups only, regardless of payment state. */
+export async function countTakenSeats(eventId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(schema.registration)
+    .where(
+      and(
+        eq(schema.registration.eventId, eventId),
+        eq(schema.registration.status, "angemeldet"),
+      ),
+    );
+  return row?.n ?? 0;
+}
+
+export type SeatInfo = {
+  /** null = unlimited seats. */
+  capacity: number | null;
+  taken: number;
+  /** null when unlimited. */
+  free: number | null;
+  isFull: boolean;
+};
+
+export async function getSeatInfo(event: Event): Promise<SeatInfo> {
+  const taken = await countTakenSeats(event.id);
+  if (event.capacity === null) {
+    return { capacity: null, taken, free: null, isFull: false };
+  }
+  const free = Math.max(0, event.capacity - taken);
+  return { capacity: event.capacity, taken, free, isFull: free === 0 };
+}
+
+/**
+ * Whether the public sign-up form should be shown at all: the admin has to
+ * leave it open and the event must not have started yet. A full event still
+ * shows the form — it just switches to the waiting list.
+ */
+export function isRegistrationOpen(event: Event): boolean {
+  return event.registrationOpen && !hasEventStarted(event);
+}
+
+export function hasEventStarted(event: Event): boolean {
+  return event.startsAt.getTime() <= Date.now();
 }
 
 export async function getStaticPage(slug: string): Promise<StaticPage | null> {

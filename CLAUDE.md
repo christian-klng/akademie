@@ -23,8 +23,8 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
 - **Sprache:** Öffentliche Texte sind Deutsch, bewusst **einfache Sprache**
   (du-Form, kurze Sätze, keine Fachbegriffe) — Zielgruppe sind
   Nicht-Techniker. Kein i18n-System.
-- **DB (Drizzle + pg):** Schema in `lib/schema.ts` (drei Tabellen:
-  `admin_user`, `event`, `static_page`). Pool öffnet **lazy** (`lib/db.ts`,
+- **DB (Drizzle + pg):** Schema in `lib/schema.ts` (vier Tabellen:
+  `admin_user`, `event`, `registration`, `static_page`). Pool öffnet **lazy** (`lib/db.ts`,
   Proxy auf `globalThis`) — der Docker-Build hat nur eine
   Platzhalter-`DATABASE_URL`. Deshalb tragen ALLE Seiten mit DB-Zugriff
   `export const dynamic = "force-dynamic"` (auch `sitemap.ts`). Nie
@@ -47,6 +47,19 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   MUSS deshalb UTC-ISO-Strings inserten (plain `pg` würde Dates lokal
   serialisieren → Drift auf Nicht-UTC-Maschinen). Nicht auf `timestamptz`
   umstellen, ohne alle Seiten anzupassen.
+- **Anmeldungen:** Öffentliches Formular auf `/events/<slug>` schreibt in
+  `registration`. Ein Platz gilt als belegt, sobald `status = "angemeldet"`
+  (unabhängig von der Zahlung); `warteliste`/`storniert` zählen nicht. Die
+  Sitzplatz-Prüfung läuft in einer Transaktion mit `SELECT … FOR UPDATE` auf
+  der Event-Zeile — sie verhindert Überbuchung UND Doppelanmeldungen, deshalb
+  gibt es bewusst keinen Unique-Index auf `(event_id, email)`.
+  `stripe_checkout_url` ist die einzige Wahrheit über kostenlos/bezahlt;
+  `price` bleibt reiner Anzeigetext. Bezahlt = Redirect auf den Stripe Payment
+  Link mit `client_reference_id=<registration.id>`, Bestätigung erst durch den
+  Webhook (`app/api/stripe/webhook/route.ts`, HMAC-Prüfung in `lib/stripe.ts`
+  über den **rohen** Body — `req.text()`, nie geparstes JSON). Mails laufen
+  über `lib/mail.ts` (nodemailer, lazy wie `lib/db.ts`); ohne `SMTP_HOST`
+  werden sie nur geloggt, eine Anmeldung darf nie an einer Mail scheitern.
 - **Statische Seiten sind ein fixes Set** (impressum/datenschutz/agb):
   editierbar, aber nicht anleg-/löschbar. Seed (`scripts/seed.mjs`) ist
   idempotent; erster Admin entsteht nur, solange kein Admin existiert.

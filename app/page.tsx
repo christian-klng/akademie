@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { EventCard } from "@/components/event-card";
@@ -45,6 +46,12 @@ export default async function Home() {
               Bald gibt es hier neue Termine. Schau gern wieder vorbei.
             </p>
           )}
+          <Link
+            href="/events"
+            className="mt-4 inline-block text-sm text-neutral-500 underline transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
+          >
+            Alle Veranstaltungen ansehen
+          </Link>
         </section>
       </main>
 
