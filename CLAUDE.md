@@ -46,6 +46,10 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   `::video[<uuid>]::` ein `<video>`; sie schlägt bewusst NICHT in der DB nach
   (die URL folgt allein aus der ID), damit das Rendern synchron bleibt — die
   ID wird gegen ein striktes UUID-Muster geprüft, bevor sie in `src` landet.
+  Alles, was über die URL hinausgeht (der Alt-Text), wird vorher aufgelöst:
+  `collectVideoIds()` → `getVideoLabels()` → `renderMarkdown(md, labels)`.
+  Gerendert wird ausschließlich über `components/markdown-content.tsx`, damit
+  dieser Schritt nicht an einer Aufrufstelle vergessen wird.
 - **Event-Zeiten sind Wanduhr-Zeiten:** naive `timestamp`-Spalten. Drizzle
   liest/schreibt sie als UTC; Formular-Parsing (`parseDatetimeLocalValue`)
   und Anzeige (`lib/format.ts`) laufen in Server-Lokalzeit. Netto: Eingabe
@@ -78,7 +82,10 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   (206/416); ohne den ist ein Video in Safari/iOS nicht spulbar. `lib/media.ts`
   ist die einzige Stelle, die die Platte anfasst, und prüft vor jedem Upload
   echten freien Plattenplatz (`statfs`) — Postgres teilt sich die Platte.
-  Kein Transkodieren: hochgeladen wird fertiges MP4/WebM.
+  Kein Transkodieren: hochgeladen wird fertiges MP4/WebM. `title` und
+  `alt_text` sind unter `/admin/videos` editierbar; **`<video>` hat kein
+  `alt`-Attribut** — der Alt-Text landet als `aria-label`, mit dem Titel als
+  Rückfall.
   **Nach dem Schreiben läuft `probeVideo`** (MP4-Box-Struktur: `ftyp` + `moov`,
   keine Box über EOF hinaus; WebM: EBML-Magic) — ohne diese Prüfung wird ein
   abgerissener Upload als Erfolg verbucht und ergibt ein Video, das eingebettet

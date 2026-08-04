@@ -11,7 +11,7 @@ import {
   isRegistrationOpen,
 } from "@/lib/queries";
 import { VideoPlayer } from "@/components/video-player";
-import { renderMarkdown } from "@/lib/markdown";
+import { MarkdownContent } from "@/components/markdown-content";
 import {
   formatEventDate,
   formatEventTime,
@@ -128,10 +128,7 @@ export default async function EventPage({
 
         {video && <VideoPlayer video={video} className="mt-8" />}
 
-        <div
-          className="md-content mt-10"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(event.body) }}
-        />
+        <MarkdownContent markdown={event.body} className="mt-10" />
 
         <div className="mt-12 rounded-xl border border-neutral-300 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-950">
           {registrationOpen ? (

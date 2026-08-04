@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, lt, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lt, sum } from "drizzle-orm";
 import { db, schema } from "./db";
 import type { Event, Media, StaticPage } from "./schema";
 
@@ -139,6 +139,25 @@ export async function getHomeVideo(): Promise<Media | null> {
     )
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Accessible names for videos embedded via `::video[<id>]::`, keyed by id.
+ * Falls back to the title when no alt text was written.
+ */
+export async function getVideoLabels(
+  ids: string[],
+): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({
+      id: schema.media.id,
+      title: schema.media.title,
+      altText: schema.media.altText,
+    })
+    .from(schema.media)
+    .where(inArray(schema.media.id, ids));
+  return new Map(rows.map((r) => [r.id, r.altText || r.title]));
 }
 
 /** Bytes used by everything on the volume — videos and posters alike. */

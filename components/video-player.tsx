@@ -18,6 +18,9 @@ export function VideoPlayer({
       controls
       preload="metadata"
       playsInline
+      // <video> has no alt attribute — aria-label is what gives it a name for
+      // screen readers. Without alt text the title is still better than nothing.
+      aria-label={video.altText || video.title}
       poster={video.posterId ? `/api/media/${video.posterId}` : undefined}
       className={`w-full rounded-xl bg-neutral-900 shadow-sm ${className ?? ""}`}
     >

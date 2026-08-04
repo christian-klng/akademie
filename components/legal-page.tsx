@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getStaticPage } from "@/lib/queries";
-import { renderMarkdown } from "@/lib/markdown";
+import { MarkdownContent } from "@/components/markdown-content";
 import { formatShortDate } from "@/lib/format";
 
 // Shared renderer for the DB-backed legal pages (impressum/datenschutz/agb).
@@ -20,10 +20,7 @@ export async function LegalPage({ slug }: { slug: string }) {
         <h1 className="text-3xl font-semibold tracking-tight">{page.title}</h1>
 
         <div className="mt-10 space-y-8">
-          <div
-            className="md-content"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(page.body) }}
-          />
+          <MarkdownContent markdown={page.body} />
           <p className="text-xs text-neutral-400">
             Stand: {formatShortDate(page.updatedAt)}
           </p>

@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { eq, ne } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { readField } from "@/lib/form";
 import { deleteFile } from "@/lib/media";
 
 // Admin edits on uploaded media. The upload itself is a route handler
@@ -29,6 +31,27 @@ export async function clearHomeVideo(id: string): Promise<void> {
     .set({ showOnHome: false })
     .where(eq(schema.media.id, id));
   revalidatePath("/", "layout");
+}
+
+const MAX_TITLE = 200;
+const MAX_ALT = 300;
+
+/** Rename a video and write its alt text (the two editable fields). */
+export async function updateVideo(id: string, formData: FormData): Promise<void> {
+  const title = readField(formData, "title").trim().slice(0, MAX_TITLE);
+  const altText = readField(formData, "altText").trim().slice(0, MAX_ALT);
+
+  if (!title) {
+    redirect(`/admin/videos?hinweis=titel-fehlt#${id}`);
+  }
+
+  await db
+    .update(schema.media)
+    .set({ title, altText })
+    .where(eq(schema.media.id, id));
+
+  revalidatePath("/", "layout");
+  redirect(`/admin/videos?hinweis=gespeichert#${id}`);
 }
 
 // Attaching a poster lives in the upload route, not here: storing the file and

@@ -36,7 +36,13 @@ export const adminUser = pgTable(
  */
 export const media = pgTable("media", {
   id: uuid("id").defaultRandom().primaryKey(),
+  /** Editable display name; prefilled from the file name on upload. */
   title: text("title").notNull(),
+  /**
+   * Short description for screen readers. `<video>` has no `alt` attribute —
+   * this becomes `aria-label`, which is what actually names a video element.
+   */
+  altText: text("alt_text").notNull().default(""),
   /** Original upload name — shown in the admin, used for the download link. */
   fileName: text("file_name").notNull(),
   mimeType: text("mime_type").notNull(),
