@@ -65,6 +65,12 @@ services:
       NOTIFY_EMAIL: ${NOTIFY_EMAIL:-}
       # Stripe webhook signing secret — only needed for paid events.
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Uploaded videos. MEDIA_DIR must match the volume mount below. The two
+      # limits are a guard rail for the host disk, which Postgres shares — a
+      # full disk takes the database down, not just the next upload.
+      MEDIA_DIR: /data/media
+      MEDIA_MAX_FILE_MB: ${MEDIA_MAX_FILE_MB:-300}
+      MEDIA_MAX_TOTAL_MB: ${MEDIA_MAX_TOTAL_MB:-2000}
       # Quiz evaluation via Cortecs AI. Empty default on purpose: without a key
       # the quiz reports "nicht verfügbar" instead of erroring per answer.
       CORTECS_API_KEY: ${CORTECS_API_KEY:-}
@@ -74,8 +80,13 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    volumes:
+      # Uploaded videos have to outlive the container: every deploy replaces it.
+      - media-data:/data/media
     ports:
       - "3000:3000"
 
 volumes:
   db-data:
+  # NOT covered by any backup — keep the original video files elsewhere.
+  media-data:

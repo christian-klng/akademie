@@ -3,7 +3,8 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { EventCard } from "@/components/event-card";
 import { Audience } from "@/components/audience";
-import { getFeaturedEvent } from "@/lib/queries";
+import { VideoPlayer } from "@/components/video-player";
+import { getFeaturedEvent, getHomeVideo } from "@/lib/queries";
 
 // The home page reads the featured event from the DB on every request. Forced
 // dynamic so the build never tries to prerender against the placeholder
@@ -11,7 +12,10 @@ import { getFeaturedEvent } from "@/lib/queries";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const event = await getFeaturedEvent();
+  const [event, video] = await Promise.all([
+    getFeaturedEvent(),
+    getHomeVideo(),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -31,6 +35,8 @@ export default async function Home() {
             In einfacher Sprache, Schritt für Schritt.
           </p>
         </div>
+
+        {video && <VideoPlayer video={video} />}
 
         <section aria-labelledby="next-event">
           <h2

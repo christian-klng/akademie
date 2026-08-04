@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt, sum } from "drizzle-orm";
 import { db, schema } from "./db";
-import type { Event, StaticPage } from "./schema";
+import type { Event, Media, StaticPage } from "./schema";
 
 /**
  * The one event featured on the home page: the next upcoming published event,
@@ -109,6 +109,45 @@ export function isRegistrationOpen(event: Event): boolean {
 
 export function hasEventStarted(event: Event): boolean {
   return event.startsAt.getTime() <= Date.now();
+}
+
+export async function getMedia(id: string): Promise<Media | null> {
+  const [row] = await db
+    .select()
+    .from(schema.media)
+    .where(eq(schema.media.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Videos for the admin list and the event picker, newest first. */
+export async function listVideos(): Promise<Media[]> {
+  return db
+    .select()
+    .from(schema.media)
+    .where(eq(schema.media.kind, "video"))
+    .orderBy(desc(schema.media.createdAt));
+}
+
+/** The one video flagged for the home page, if any. */
+export async function getHomeVideo(): Promise<Media | null> {
+  const [row] = await db
+    .select()
+    .from(schema.media)
+    .where(
+      and(eq(schema.media.kind, "video"), eq(schema.media.showOnHome, true)),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+/** Bytes used by everything on the volume — videos and posters alike. */
+export async function totalMediaBytes(): Promise<number> {
+  const [row] = await db
+    .select({ total: sum(schema.media.sizeBytes) })
+    .from(schema.media);
+  // sum() is null on an empty table and comes back as a numeric string.
+  return Number(row?.total ?? 0);
 }
 
 export async function getStaticPage(slug: string): Promise<StaticPage | null> {

@@ -49,6 +49,12 @@ export default function AdminLayout({
               Anmeldungen
             </Link>
             <Link
+              href="/admin/videos"
+              className="text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+            >
+              Videos
+            </Link>
+            <Link
               href="/admin/pages"
               className="text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
             >

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { count, eq } from "drizzle-orm";
 import { ExternalLink, Users } from "lucide-react";
 import { db, schema } from "@/lib/db";
+import { listVideos } from "@/lib/queries";
 import { toDatetimeLocalValue } from "@/lib/format";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { EventForm } from "../event-form";
@@ -30,10 +31,13 @@ export default async function EditEventPage({
     .limit(1);
   if (!event) notFound();
 
-  const [{ n: registrations }] = await db
-    .select({ n: count() })
-    .from(schema.registration)
-    .where(eq(schema.registration.eventId, event.id));
+  const [[{ n: registrations }], videos] = await Promise.all([
+    db
+      .select({ n: count() })
+      .from(schema.registration)
+      .where(eq(schema.registration.eventId, event.id)),
+    listVideos(),
+  ]);
 
   return (
     <div>
@@ -64,6 +68,7 @@ export default async function EditEventPage({
 
       <div className="mt-6">
         <EventForm
+          videos={videos.map((v) => ({ id: v.id, title: v.title }))}
           initial={{
             id: event.id,
             title: event.title,
@@ -77,6 +82,7 @@ export default async function EditEventPage({
             capacity: event.capacity === null ? "" : String(event.capacity),
             stripeCheckoutUrl: event.stripeCheckoutUrl,
             registrationOpen: event.registrationOpen,
+            videoId: event.videoId ?? "",
             startsAt: toDatetimeLocalValue(event.startsAt),
             endsAt: toDatetimeLocalValue(event.endsAt),
             published: event.published,

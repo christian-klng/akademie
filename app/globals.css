@@ -123,3 +123,12 @@ body {
 .dark .md-content blockquote {
   border-left-color: #404040; /* neutral-700 */
 }
+/* Videos embedded via the ::video[id]:: shortcode (lib/markdown.ts). Same
+   rounded, dark-backed look as the cards elsewhere on the site. */
+.md-content video {
+  display: block;
+  width: 100%;
+  margin: 1.5rem 0;
+  border-radius: 0.75rem;
+  background: #171717; /* neutral-900 — letterboxing instead of white bars */
+}

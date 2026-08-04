@@ -16,10 +16,14 @@ export type EventFormValues = {
   capacity: string; // empty = unlimited
   stripeCheckoutUrl: string;
   registrationOpen: boolean;
+  videoId: string; // "" = kein Video
   startsAt: string; // datetime-local value
   endsAt: string;
   published: boolean;
 };
+
+/** Videos to offer in the picker — loaded by the page, not by this component. */
+export type VideoOption = { id: string; title: string };
 
 const initialState: EventFormState = {};
 
@@ -28,7 +32,13 @@ const inputClass =
 const labelClass = "text-sm font-medium";
 const hintClass = "text-xs text-neutral-500";
 
-export function EventForm({ initial }: { initial: EventFormValues }) {
+export function EventForm({
+  initial,
+  videos,
+}: {
+  initial: EventFormValues;
+  videos: VideoOption[];
+}) {
   const [state, formAction, pending] = useActionState(saveEvent, initialState);
 
   return (
@@ -204,6 +214,29 @@ export function EventForm({ initial }: { initial: EventFormValues }) {
             Stripe weitergeleitet.
           </p>
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="videoId" className={labelClass}>
+          Video
+        </label>
+        <select
+          id="videoId"
+          name="videoId"
+          defaultValue={initial.videoId}
+          className={inputClass}
+        >
+          <option value="">Kein Video</option>
+          {videos.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.title}
+            </option>
+          ))}
+        </select>
+        <p className={hintClass}>
+          Erscheint auf der Event-Seite über der Beschreibung. Videos lädst du
+          unter &bdquo;Videos&ldquo; hoch.
+        </p>
       </div>
 
       <div className="space-y-1.5">

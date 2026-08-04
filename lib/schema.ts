@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -7,6 +8,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // Schema is applied via `drizzle-kit push --force` in the one-shot `migrate`
@@ -25,6 +27,35 @@ export const adminUser = pgTable(
   },
   (t) => [uniqueIndex("admin_user_email_idx").on(t.email)],
 );
+
+/**
+ * An uploaded file on the media volume. The row id doubles as the file name
+ * (lib/media.ts) — nothing from a request ever ends up in a path.
+ *
+ * Declared before `event` because `event.videoId` points at it.
+ */
+export const media = pgTable("media", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  /** Original upload name — shown in the admin, used for the download link. */
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  // bigint, not integer: an integer column would overflow at ~2 GB, and the
+  // per-file cap is configurable.
+  sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+  /** "video" | "poster" — see MEDIA_KINDS. */
+  kind: text("kind").notNull().default("video"),
+  /** Still image for a video. Self-reference, hence the AnyPgColumn callback. */
+  posterId: uuid("poster_id").references((): AnyPgColumn => media.id, {
+    onDelete: "set null",
+  }),
+  /** At most one video carries this; the admin action clears the others. */
+  showOnHome: boolean("show_on_home").notNull().default(false),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const MEDIA_KINDS = ["video", "poster"] as const;
+export type MediaKind = (typeof MEDIA_KINDS)[number];
 
 /**
  * A single training event. Times are naive `timestamp` columns; drizzle reads
@@ -59,6 +90,10 @@ export const event = pgTable(
     stripeCheckoutUrl: text("stripe_checkout_url").notNull().default(""),
     /** Lets an admin close sign-ups without unpublishing the event. */
     registrationOpen: boolean("registration_open").notNull().default(true),
+    /** Optional video shown above the description. Deleting it just unlinks. */
+    videoId: uuid("video_id").references(() => media.id, {
+      onDelete: "set null",
+    }),
     published: boolean("published").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
@@ -122,3 +157,4 @@ export const staticPage = pgTable("static_page", {
 export type Event = typeof event.$inferSelect;
 export type StaticPage = typeof staticPage.$inferSelect;
 export type Registration = typeof registration.$inferSelect;
+export type Media = typeof media.$inferSelect;

@@ -26,6 +26,8 @@ export async function saveEvent(
   const capacityRaw = readField(formData, "capacity").trim();
   const stripeCheckoutUrl = readField(formData, "stripeCheckoutUrl").trim();
   const registrationOpen = readField(formData, "registrationOpen") === "on";
+  // Empty select → no video. The FK rejects anything that isn't a real id.
+  const videoId = readField(formData, "videoId").trim() || null;
   const startsAt = parseDatetimeLocalValue(readField(formData, "startsAt"));
   const endsAt = parseDatetimeLocalValue(readField(formData, "endsAt"));
   const published = readField(formData, "published") === "on";
@@ -90,6 +92,7 @@ export async function saveEvent(
     capacity,
     stripeCheckoutUrl,
     registrationOpen,
+    videoId,
     startsAt,
     endsAt,
     published,

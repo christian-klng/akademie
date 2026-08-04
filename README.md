@@ -75,28 +75,6 @@ Einmalige Einrichtung:
 6. Nach jeder Env-Änderung **redeployen/neustarten** (Node liest `process.env`
    nur beim Start).
 
-## Deploy auf Railway (Alternative)
-
-Railway baut direkt aus dem GitHub-Repo: Das `Dockerfile` wird automatisch
-erkannt, gebaut wird immer dessen **letzte** Stage (`railway` = Standalone-App
-plus Migrations-Werkzeug). `railway.json` steuert den Rest — insbesondere läuft
-`npm run migrate` vor jedem Deploy automatisch als **Pre-Deploy-Command**.
-Einen separaten `migrate`-Service wie bei Coolify gibt es nicht.
-
-1. Auf railway.com ein Projekt anlegen → **Deploy from GitHub repo** →
-   `christian-klng/akademie` (Auto-Deploy bei Push ist damit inklusive).
-2. **Postgres hinzufügen:** im Projekt-Canvas „Create“ → „Database“ →
-   „Add PostgreSQL“.
-3. **Variablen** auf dem App-Service setzen:
-   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (Referenz auf den
-     Postgres-Service, nutzt das interne Netz)
-   - `SESSION_SECRET` (`openssl rand -base64 32`)
-   - `ADMIN_EMAIL` + `ADMIN_PASSWORD` (erster Admin, nur beim ersten Seed)
-   - `SITE_URL` = öffentliche URL aus Schritt 4
-4. **Domain:** App-Service → Settings → Networking → „Generate Domain“
-   (Ziel-Port 3000) oder Custom Domain per CNAME; danach `SITE_URL` anpassen.
-5. Fertig — jeder Push deployt: bauen → `npm run migrate` → App starten.
-
 ### Hinweise
 
 - **Postgres 18:** Das Volume ist auf `/var/lib/postgresql` gemountet (nicht
@@ -118,3 +96,22 @@ Einen separaten `migrate`-Service wie bei Coolify gibt es nicht.
 - Offene Stellen in den Rechtstexten sind mit **[Bitte ergänzen]** markiert.
 - Event-Zeiten sind „Wanduhr“-Zeiten (keine Zeitzonen-Umrechnung): was du im
   Formular einträgst, wird genau so angezeigt.
+
+### Videos
+
+Unter `/admin/videos` lädst du Videos hoch. Sie landen auf dem Volume
+`media-data` und lassen sich an drei Stellen einbinden: als Video eines Events
+(Auswahlfeld im Event-Formular), als Video der Startseite (Knopf „Auf die
+Startseite“) und mitten im Text über `::video[<id>]::` — den fertigen Schnipsel
+kopierst du dir in der Video-Liste.
+
+- **Format:** fertige MP4-Dateien (H.264/AAC) oder WebM. Die Seite rechnet
+  nichts um — was du hochlädst, wird ausgeliefert.
+- **Grenzen:** `MEDIA_MAX_FILE_MB` pro Datei, `MEDIA_MAX_TOTAL_MB` insgesamt.
+  Beides bremst absichtlich: die Videos liegen auf derselben Platte wie
+  Postgres, und eine volle Platte stoppt die Datenbank.
+- **Kein Backup.** Das Volume wird nirgends gesichert. Bewahre die
+  Originaldateien bei dir auf.
+- **Traffic läuft über den Server.** Für gelegentliche Erklärvideos passt das.
+  Werden Videos zum Hauptinhalt, ist ein EU-Videodienst (z. B. Bunny Stream)
+  der nächste Schritt — es müsste nur die Auslieferung getauscht werden.

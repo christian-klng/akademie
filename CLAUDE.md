@@ -60,6 +60,19 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   über den **rohen** Body — `req.text()`, nie geparstes JSON). Mails laufen
   über `lib/mail.ts` (nodemailer, lazy wie `lib/db.ts`); ohne `SMTP_HOST`
   werden sie nur geloggt, eine Anmeldung darf nie an einer Mail scheitern.
+- **Videos liegen auf dem Volume `media-data`** (`MEDIA_DIR`, Default
+  `/data/media`), eine Zeile pro Datei in `media`; die Zeilen-UUID **ist** der
+  Dateiname — nichts aus einem Request landet je in einem Pfad. Upload ist eine
+  Route unter `/admin/` (von `proxy.ts` mitgegated), **kein** Server-Action:
+  die haben 1 MB Body-Limit und puffern im RAM. Der rohe Request-Body wird
+  direkt auf die Platte gestreamt, jeder Fehlversuch räumt die Teildatei weg.
+  Standbilder werden im selben Request hochgeladen UND verknüpft (`attachTo`) —
+  zwei Schritte hinterlassen verwaiste Dateien, die keine Oberfläche mehr
+  anzeigt. Ausgeliefert wird über `app/api/media/[id]` **mit Range-Support**
+  (206/416); ohne den ist ein Video in Safari/iOS nicht spulbar. `lib/media.ts`
+  ist die einzige Stelle, die die Platte anfasst, und prüft vor jedem Upload
+  echten freien Plattenplatz (`statfs`) — Postgres teilt sich die Platte.
+  Kein Transkodieren: hochgeladen wird fertiges MP4/WebM.
 - **Statische Seiten sind ein fixes Set** (impressum/datenschutz/agb):
   editierbar, aber nicht anleg-/löschbar. Seed (`scripts/seed.mjs`) ist
   idempotent; erster Admin entsteht nur, solange kein Admin existiert.
@@ -88,13 +101,11 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   sein**, sonst injiziert Coolify sie nicht. Nach Env-Änderung redeployen.
 - **Postgres-18-Image:** Volume-Mount ist `/var/lib/postgresql` (NICHT
   `…/data`) — Daten liegen unter `/var/lib/postgresql/18/docker`.
-- **Railway-Alternative:** `railway.json` + Dockerfile-Stage `railway`
-  (Standalone-Runner + volle node_modules für drizzle-kit/Seed). Railway baut
-  immer die LETZTE Dockerfile-Stage — `railway` muss die letzte bleiben,
-  nie Stages dahinter anhängen. Migration+Seed laufen als Pre-Deploy-Command
-  (`npm run migrate`) in einem separaten Container mit dem App-Image;
-  DB kommt als Railway-Postgres-Service (`DATABASE_URL` =
-  `${{Postgres.DATABASE_URL}}`-Referenz), kein `migrate`-Service nötig.
+- **Coolify ist das einzige Deploy-Ziel.** Das Dockerfile hat genau drei
+  Stages, die zählen: `migrator` und `runner` werden vom Workflow explizit
+  per `--target` gebaut, `deps`/`builder` sind Zwischenstufen. Es gibt keine
+  Plattform, die „die letzte Stage" baut — neue Stages dürfen also frei
+  hinten angehängt werden.
 
 ## Konventionen
 

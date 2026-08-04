@@ -4,11 +4,13 @@ import { CalendarDays, Mail, MapPin, Ticket, Users } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import {
+  getMedia,
   getPublishedEvent,
   getSeatInfo,
   hasEventStarted,
   isRegistrationOpen,
 } from "@/lib/queries";
+import { VideoPlayer } from "@/components/video-player";
 import { renderMarkdown } from "@/lib/markdown";
 import {
   formatEventDate,
@@ -73,6 +75,7 @@ export default async function EventPage({
   const seats = await getSeatInfo(event);
   const registrationOpen = isRegistrationOpen(event);
   const started = hasEventStarted(event);
+  const video = event.videoId ? await getMedia(event.videoId) : null;
 
   const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
     `Frage zu: ${event.title}`,
@@ -122,6 +125,8 @@ export default async function EventPage({
         {event.teaser && (
           <p className="mt-3 text-lg text-neutral-500">{event.teaser}</p>
         )}
+
+        {video && <VideoPlayer video={video} className="mt-8" />}
 
         <div
           className="md-content mt-10"
