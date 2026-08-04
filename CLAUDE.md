@@ -8,7 +8,9 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
 
 ## Kommandos
 
-- `npm run dev` — lokal (braucht `DATABASE_URL` + `SESSION_SECRET`).
+- `npm run dev` — lokal (braucht `DATABASE_URL` + `SESSION_SECRET`; für
+  Video-Arbeit zusätzlich `MEDIA_DIR` auf ein beschreibbares Verzeichnis, sonst
+  landen Uploads unter dem Default `/data/media`).
 - `npm run build` + `npm run lint` — nach jeder inhaltlichen Änderung, beide
   müssen sauber sein.
 - `npm run db:push` — Drizzle-Schema anwenden; `npm run seed` — idempotenter
@@ -23,8 +25,9 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
 - **Sprache:** Öffentliche Texte sind Deutsch, bewusst **einfache Sprache**
   (du-Form, kurze Sätze, keine Fachbegriffe) — Zielgruppe sind
   Nicht-Techniker. Kein i18n-System.
-- **DB (Drizzle + pg):** Schema in `lib/schema.ts` (vier Tabellen:
-  `admin_user`, `event`, `registration`, `static_page`). Pool öffnet **lazy** (`lib/db.ts`,
+- **DB (Drizzle + pg):** Schema in `lib/schema.ts` (fünf Tabellen:
+  `admin_user`, `media`, `event`, `registration`, `static_page` — `media` steht
+  vor `event`, weil `event.video_id` darauf zeigt). Pool öffnet **lazy** (`lib/db.ts`,
   Proxy auf `globalThis`) — der Docker-Build hat nur eine
   Platzhalter-`DATABASE_URL`. Deshalb tragen ALLE Seiten mit DB-Zugriff
   `export const dynamic = "force-dynamic"` (auch `sitemap.ts`). Nie
@@ -39,7 +42,10 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   (`lib/markdown.ts`, `breaks: true`). Kein Sanitizer — Autoren sind
   ausschließlich eingeloggte Admins. Styling über `.md-content` in
   `app/globals.css` (Literalfarben — Tailwind v4 emittiert Theme-Variablen
-  nur, wenn Utilities sie nutzen).
+  nur, wenn Utilities sie nutzen). Eine eigene marked-Erweiterung macht aus
+  `::video[<uuid>]::` ein `<video>`; sie schlägt bewusst NICHT in der DB nach
+  (die URL folgt allein aus der ID), damit das Rendern synchron bleibt — die
+  ID wird gegen ein striktes UUID-Muster geprüft, bevor sie in `src` landet.
 - **Event-Zeiten sind Wanduhr-Zeiten:** naive `timestamp`-Spalten. Drizzle
   liest/schreibt sie als UTC; Formular-Parsing (`parseDatetimeLocalValue`)
   und Anzeige (`lib/format.ts`) laufen in Server-Lokalzeit. Netto: Eingabe
@@ -93,9 +99,12 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
 - **Images baut GitHub Actions** (`.github/workflows/build-images.yml`): Push
   auf `main` → `ghcr.io/christian-klng/akademie-web` und `…-migrate` →
   Workflow triggert den Coolify-Deploy-Webhook. Coolify pullt nur
-  (`image:` in `docker-compose.yml`), der Server baut nie selbst (4-GB-Box,
-  `next build` würde sie in den Swap drücken). Auto-Deploy-on-Push in
-  Coolify muss AUS bleiben, sonst deployt Coolify, bevor das Image fertig ist.
+  (`image:` in `docker-compose.yml`), **der Server baut nie selbst** — das
+  Setup entstand auf einer 4-GB-Box, wo `next build` in den Swap lief. Der
+  aktuelle Server (178.104.69.162) ist größer, sein RAM ist aber nicht
+  nachgemessen; die Pipeline bleibt so, es gibt keinen Grund zurückzubauen.
+  Auto-Deploy-on-Push in Coolify muss AUS bleiben, sonst deployt Coolify,
+  bevor das Image fertig ist.
 - **`web` und `migrate` tragen `pull_policy: always`.** Beide zeigen auf den
   wandernden Tag `:latest`. Ohne diese Zeile benutzt `compose up` das lokal
   schon vorhandene Image weiter und deployt still den alten Stand — während
@@ -109,6 +118,14 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   sein**, sonst injiziert Coolify sie nicht. Nach Env-Änderung redeployen.
 - **Postgres-18-Image:** Volume-Mount ist `/var/lib/postgresql` (NICHT
   `…/data`) — Daten liegen unter `/var/lib/postgresql/18/docker`.
+- **Zwei Volumes, beide ohne Backup:** `db-data` und `media-data`. Letzteres
+  hält die hochgeladenen Videos; wird es gelöscht, zeigen alle `media`-Zeilen
+  ins Leere (die Auslieferung antwortet dann 404). `/data/media` wird schon im
+  Dockerfile angelegt und `node:node` übereignet — Docker übernimmt beim
+  **ersten** Anlegen eines Volumes Inhalt und Eigentümer des Mountpunkts, sonst
+  gehörte es root und der Container läuft als `node` (Uploads: `EACCES`).
+  Auf dem Server verifiziert (2026-08-04): Rechte stimmen, Platte 38 GB mit
+  ~17 GB frei.
 - **Coolify ist das einzige Deploy-Ziel.** Das Dockerfile hat genau drei
   Stages, die zählen: `migrator` und `runner` werden vom Workflow explizit
   per `--target` gebaut, `deps`/`builder` sind Zwischenstufen. Es gibt keine
