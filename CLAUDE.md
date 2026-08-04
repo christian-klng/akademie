@@ -86,6 +86,17 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   `alt_text` sind unter `/admin/videos` editierbar; **`<video>` hat kein
   `alt`-Attribut** — der Alt-Text landet als `aria-label`, mit dem Titel als
   Rückfall.
+- **Event-Thumbnails** (`event.image_id` → `media` mit `kind = "image"`):
+  eigener Upload unter `/admin/events/<id>/image`, der Datei speichert UND
+  verknüpft; Bilder haben mit `MEDIA_MAX_IMAGE_MB` ein viel kleineres Limit als
+  Videos. Anders als Videos gehört ein Thumbnail **genau einem Event** —
+  `deleteEvent` und `removeEventImage` löschen deshalb Zeile und Datei mit,
+  sonst bliebe eine Datei liegen, die keine Oberfläche listet. Anzeige 16:9
+  (`aspect-video` + `object-cover`) über `next/image`; ohne Bild fällt es
+  ersatzlos weg. `alt=""` ist Absicht — der Titel steht direkt daneben.
+  Das Bild geht zusätzlich in `openGraph.images`, die Twitter-Card und das
+  JSON-LD, dort als **absolute** URL über `SITE_URL` (Crawler lösen keine
+  relativen Pfade auf).
   **Nach dem Schreiben läuft `probeVideo`** (MP4-Box-Struktur: `ftyp` + `moov`,
   keine Box über EOF hinaus; WebM: EBML-Magic) — ohne diese Prüfung wird ein
   abgerissener Upload als Erfolg verbucht und ergibt ein Video, das eingebettet

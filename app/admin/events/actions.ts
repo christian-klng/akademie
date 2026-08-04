@@ -6,6 +6,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { readField } from "@/lib/form";
 import { parseDatetimeLocalValue, slugify } from "@/lib/format";
+import { deleteFile } from "@/lib/media";
 import { countTakenSeats } from "@/lib/queries";
 
 export type EventFormState = { error?: string };
@@ -116,7 +117,41 @@ export async function saveEvent(
 }
 
 export async function deleteEvent(id: string): Promise<void> {
+  const [event] = await db
+    .select({ imageId: schema.event.imageId })
+    .from(schema.event)
+    .where(eq(schema.event.id, id))
+    .limit(1);
+
   await db.delete(schema.event).where(eq(schema.event.id, id));
+
+  // The thumbnail belongs to this event alone — without this it would stay on
+  // the volume forever, listed nowhere. Videos are shared and stay put.
+  if (event?.imageId) {
+    await db.delete(schema.media).where(eq(schema.media.id, event.imageId));
+    await deleteFile(event.imageId);
+  }
+
   revalidatePath("/", "layout");
   redirect("/admin/events");
+}
+
+/** Take the thumbnail off an event and delete the file. */
+export async function removeEventImage(id: string): Promise<void> {
+  const [event] = await db
+    .select({ imageId: schema.event.imageId })
+    .from(schema.event)
+    .where(eq(schema.event.id, id))
+    .limit(1);
+  if (!event?.imageId) redirect(`/admin/events/${id}`);
+
+  await db
+    .update(schema.event)
+    .set({ imageId: null, updatedAt: new Date() })
+    .where(eq(schema.event.id, id));
+  await db.delete(schema.media).where(eq(schema.media.id, event.imageId));
+  await deleteFile(event.imageId);
+
+  revalidatePath("/", "layout");
+  redirect(`/admin/events/${id}`);
 }

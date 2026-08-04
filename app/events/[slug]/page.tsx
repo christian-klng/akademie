@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { CalendarDays, Mail, MapPin, Ticket, Users } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
@@ -32,6 +33,13 @@ export async function generateMetadata({
   const { slug } = await params;
   const event = await getPublishedEvent(slug);
   if (!event) return {};
+
+  // Absolute URL required: the crawlers behind link previews don't resolve
+  // relative paths.
+  const images = event.imageId
+    ? [{ url: `${SITE_URL}/api/media/${event.imageId}` }]
+    : undefined;
+
   return {
     title: event.title,
     description: event.teaser,
@@ -43,6 +51,13 @@ export async function generateMetadata({
       url: `${SITE_URL}/events/${event.slug}`,
       siteName: SITE_NAME,
       locale: "de_DE",
+      images,
+    },
+    twitter: {
+      card: images ? "summary_large_image" : "summary",
+      title: event.title,
+      description: event.teaser,
+      images,
     },
   };
 }
@@ -62,6 +77,9 @@ export default async function EventPage({
     "@type": "Event",
     name: event.title,
     description: event.teaser,
+    ...(event.imageId
+      ? { image: `${SITE_URL}/api/media/${event.imageId}` }
+      : {}),
     startDate: toNaiveIso(event.startsAt),
     ...(event.endsAt ? { endDate: toNaiveIso(event.endsAt) } : {}),
     ...(event.location
@@ -90,6 +108,19 @@ export default async function EventPage({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+
+        {event.imageId && (
+          <div className="relative mb-8 aspect-video w-full overflow-hidden rounded-xl bg-neutral-100 dark:bg-neutral-900">
+            <Image
+              src={`/api/media/${event.imageId}`}
+              alt=""
+              fill
+              priority
+              sizes="(min-width: 672px) 640px, 100vw"
+              className="object-cover"
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5 text-sm text-neutral-500">
           <span className="inline-flex items-center gap-2">

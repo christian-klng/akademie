@@ -71,6 +71,7 @@ services:
       MEDIA_DIR: /data/media
       MEDIA_MAX_FILE_MB: ${MEDIA_MAX_FILE_MB:-300}
       MEDIA_MAX_TOTAL_MB: ${MEDIA_MAX_TOTAL_MB:-2000}
+      MEDIA_MAX_IMAGE_MB: ${MEDIA_MAX_IMAGE_MB:-8}
       # Quiz evaluation via Cortecs AI. Empty default on purpose: without a key
       # the quiz reports "nicht verfügbar" instead of erroring per answer.
       CORTECS_API_KEY: ${CORTECS_API_KEY:-}

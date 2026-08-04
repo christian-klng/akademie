@@ -49,7 +49,7 @@ export const media = pgTable("media", {
   // bigint, not integer: an integer column would overflow at ~2 GB, and the
   // per-file cap is configurable.
   sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
-  /** "video" | "poster" — see MEDIA_KINDS. */
+  /** "video" | "poster" | "image" — see MEDIA_KINDS. */
   kind: text("kind").notNull().default("video"),
   /** Still image for a video. Self-reference, hence the AnyPgColumn callback. */
   posterId: uuid("poster_id").references((): AnyPgColumn => media.id, {
@@ -60,7 +60,8 @@ export const media = pgTable("media", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
 
-export const MEDIA_KINDS = ["video", "poster"] as const;
+// "poster" is the still frame of a video, "image" the thumbnail of an event.
+export const MEDIA_KINDS = ["video", "poster", "image"] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
 /**
@@ -98,6 +99,14 @@ export const event = pgTable(
     registrationOpen: boolean("registration_open").notNull().default(true),
     /** Optional video shown above the description. Deleting it just unlinks. */
     videoId: uuid("video_id").references(() => media.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Thumbnail: shown on the event card, on the event page and as the preview
+     * image when the link is shared. Belongs to exactly this event — deleting
+     * the event deletes it (see deleteEvent), unlike the shared videos.
+     */
+    imageId: uuid("image_id").references(() => media.id, {
       onDelete: "set null",
     }),
     published: boolean("published").notNull().default(false),

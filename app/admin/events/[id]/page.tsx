@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { count, eq } from "drizzle-orm";
@@ -6,8 +7,9 @@ import { db, schema } from "@/lib/db";
 import { listVideos } from "@/lib/queries";
 import { toDatetimeLocalValue } from "@/lib/format";
 import { ConfirmSubmit } from "@/components/confirm-submit";
+import { MediaUploader } from "@/components/media-uploader";
 import { EventForm } from "../event-form";
-import { deleteEvent } from "../actions";
+import { deleteEvent, removeEventImage } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,49 @@ export default async function EditEventPage({
           )}
         </div>
       </div>
+
+      {/* Its own block, outside the form: the image is saved on upload, not
+          when the form is submitted. */}
+      <section className="mt-6 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="text-sm font-medium">Bild</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          Erscheint auf der Terminliste, oben auf der Event-Seite und als
+          Vorschaubild, wenn jemand den Link teilt. Wird auf 16:9 zugeschnitten —
+          quer aufgenommene Bilder passen am besten. Ohne Bild bleibt einfach
+          alles wie bisher.
+        </p>
+
+        {event.imageId && (
+          <div className="relative mt-3 aspect-video w-full max-w-sm overflow-hidden rounded-lg bg-neutral-100 dark:bg-neutral-900">
+            <Image
+              src={`/api/media/${event.imageId}`}
+              alt=""
+              fill
+              sizes="384px"
+              className="object-cover"
+              unoptimized
+            />
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <MediaUploader
+            kind="image"
+            label={event.imageId ? "Bild austauschen" : "Bild hochladen"}
+            endpoint={`/admin/events/${event.id}/image`}
+          />
+          {event.imageId && (
+            <form action={removeEventImage.bind(null, event.id)}>
+              <ConfirmSubmit
+                label="Bild entfernen"
+                pendingLabel="Wird entfernt …"
+                confirmText="Bild wirklich entfernen? Die Datei wird gelöscht."
+                className="rounded-md border border-danger/40 px-3 py-1.5 text-sm font-medium text-danger transition hover:bg-danger/10 disabled:opacity-50"
+              />
+            </form>
+          )}
+        </div>
+      </section>
 
       <div className="mt-6">
         <EventForm

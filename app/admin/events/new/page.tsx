@@ -9,6 +9,9 @@ export default async function NewEventPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Neues Event</h1>
+      <p className="mt-2 text-sm text-neutral-500">
+        Ein Bild kannst du hochladen, sobald das Event gespeichert ist.
+      </p>
       <div className="mt-6">
         <EventForm
           videos={videos.map((v) => ({ id: v.id, title: v.title }))}

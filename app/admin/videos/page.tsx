@@ -5,7 +5,7 @@ import { formatBytes, maxTotalBytes } from "@/lib/media";
 import { formatShortDate } from "@/lib/format";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { CopyButton } from "@/components/copy-button";
-import { MediaUploader } from "./media-uploader";
+import { MediaUploader } from "@/components/media-uploader";
 import { clearHomeVideo, deleteVideo, setHomeVideo, updateVideo } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +49,11 @@ export default async function AdminVideosPage({
     <div>
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Videos</h1>
-        <MediaUploader kind="video" label="Video hochladen" />
+        <MediaUploader
+          kind="video"
+          label="Video hochladen"
+          endpoint="/admin/videos/upload"
+        />
       </div>
 
       {hinweis && HINWEISE[hinweis] && (
@@ -208,6 +212,7 @@ export default async function AdminVideosPage({
                     <MediaUploader
                       kind="poster"
                       label={video.posterId ? "Standbild tauschen" : "Standbild"}
+                      endpoint="/admin/videos/upload"
                       attachTo={video.id}
                     />
 

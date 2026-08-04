@@ -4,11 +4,12 @@ import type { NextRequest } from "next/server";
 import { db, schema } from "@/lib/db";
 import { getMedia, totalMediaBytes } from "@/lib/queries";
 import {
-  ALLOWED_POSTER,
+  ALLOWED_IMAGE,
   ALLOWED_VIDEO,
   deleteFile,
   hasRoomFor,
   maxFileBytes,
+  maxImageBytes,
   probeVideo,
   saveStream,
 } from "@/lib/media";
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   // nothing lists it, and it still eats disk.
   const attachTo = params.get("attachTo");
 
-  const allowed = kind === "poster" ? ALLOWED_POSTER : ALLOWED_VIDEO;
+  const allowed = kind === "poster" ? ALLOWED_IMAGE : ALLOWED_VIDEO;
   if (!allowed[mimeType]) {
     const list = Object.values(allowed).join(", ");
     return fail(
@@ -65,14 +66,12 @@ export async function POST(request: NextRequest): Promise<Response> {
   // an obviously oversized upload is refused instead of half-written. The real
   // limit is enforced again while streaming (saveStream), which is what counts.
   const announced = Number(request.headers.get("content-length") ?? 0);
-  const room = await hasRoomFor(
-    announced || 1,
-    await totalMediaBytes(),
-  );
+  const limit = kind === "poster" ? maxImageBytes() : maxFileBytes();
+  const room = await hasRoomFor(announced || 1, await totalMediaBytes(), limit);
   if (!room.ok) return fail(room.reason, 413);
 
   const id = randomUUID();
-  const saved = await saveStream(id, request.body, maxFileBytes(), announced);
+  const saved = await saveStream(id, request.body, limit, announced);
   if (!saved.ok) return fail(saved.reason, 413);
 
   // Everything arrived — but does it hang together? A half video whose index is

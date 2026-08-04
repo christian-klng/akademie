@@ -4,22 +4,35 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 
-// File picker with a progress bar.
+// File picker with a progress bar, shared by the video area and the event
+// thumbnail.
 //
 // XMLHttpRequest instead of fetch: only XHR reports upload progress, and a
 // 200 MB video that uploads in silence for three minutes looks broken. The
-// file goes up as the raw request body — the route handler streams it to disk
-// (see ./upload/route.ts), which fetch/FormData would defeat by buffering.
+// file goes up as the raw request body — the route handlers stream it to disk,
+// which fetch/FormData would defeat by buffering.
 
 type Props = {
-  kind: "video" | "poster";
+  kind: "video" | "poster" | "image";
   label: string;
+  /**
+   * Where to POST. Both endpoints store the file and link it in one request:
+   * `/admin/videos/upload` (videos and their still frames) and
+   * `/admin/events/<id>/image` (event thumbnails).
+   */
+  endpoint: string;
   /** Video id a poster belongs to — linked server-side in the same request. */
   attachTo?: string;
   className?: string;
 };
 
-export function MediaUploader({ kind, label, attachTo, className }: Props) {
+export function MediaUploader({
+  kind,
+  label,
+  endpoint,
+  attachTo,
+  className,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [percent, setPercent] = useState<number | null>(null);
@@ -42,7 +55,7 @@ export function MediaUploader({ kind, label, attachTo, className }: Props) {
     });
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/admin/videos/upload?${query}`);
+    xhr.open("POST", `${endpoint}?${query}`);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setPercent(Math.round((e.loaded / e.total) * 100));
@@ -93,12 +106,12 @@ export function MediaUploader({ kind, label, attachTo, className }: Props) {
         disabled={busy}
         onClick={() => inputRef.current?.click()}
         className={
-          kind === "video"
-            ? "inline-flex items-center gap-1.5 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-            : "rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          kind === "poster"
+            ? "rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            : "inline-flex items-center gap-1.5 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
         }
       >
-        {kind === "video" && <Upload className="h-4 w-4" aria-hidden />}
+        {kind !== "poster" && <Upload className="h-4 w-4" aria-hidden />}
         {busy ? `${percent} %` : label}
       </button>
 

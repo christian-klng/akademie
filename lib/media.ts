@@ -17,7 +17,8 @@ export const ALLOWED_VIDEO: Record<string, string> = {
   "video/webm": "webm",
 };
 
-export const ALLOWED_POSTER: Record<string, string> = {
+/** Used for both video still frames and event thumbnails. */
+export const ALLOWED_IMAGE: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
@@ -45,6 +46,11 @@ export function maxTotalBytes(): number {
   return Number(process.env.MEDIA_MAX_TOTAL_MB ?? 2000) * 1024 * 1024;
 }
 
+/** Pictures get their own, much smaller ceiling than videos. */
+export function maxImageBytes(): number {
+  return Number(process.env.MEDIA_MAX_IMAGE_MB ?? 8) * 1024 * 1024;
+}
+
 /** "1,2 GB" / "740 MB" — German decimal comma, for the admin UI. */
 export function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024 * 1024) {
@@ -63,11 +69,12 @@ export type RoomCheck = { ok: true } | { ok: false; reason: string };
 export async function hasRoomFor(
   bytes: number,
   usedBytes: number,
+  limitBytes: number = maxFileBytes(),
 ): Promise<RoomCheck> {
-  if (bytes > maxFileBytes()) {
+  if (bytes > limitBytes) {
     return {
       ok: false,
-      reason: `Die Datei ist zu groß. Erlaubt sind ${formatBytes(maxFileBytes())} pro Video.`,
+      reason: `Die Datei ist zu groß. Erlaubt sind ${formatBytes(limitBytes)}.`,
     };
   }
 
