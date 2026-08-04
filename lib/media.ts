@@ -1,6 +1,6 @@
 import "server-only";
 import { createWriteStream } from "node:fs";
-import { mkdir, statfs, unlink } from "node:fs/promises";
+import { mkdir, open, stat, statfs, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
@@ -109,11 +109,17 @@ export type SaveResult =
  * memory, and a 300 MB video next to Postgres on a 4 GB box is how you get an
  * OOM kill. On any failure the partial file is removed, so a rejected upload
  * never leaves bytes behind.
+ *
+ * `expectedBytes` (the request's content-length) is what makes a HALF upload
+ * fail instead of succeed. A dropped connection ends the body stream cleanly
+ * from Node's point of view, so without this comparison a truncated video is
+ * stored as if all were well — it embeds, shows controls, and plays nothing.
  */
 export async function saveStream(
   id: string,
   body: ReadableStream<Uint8Array>,
   limitBytes: number,
+  expectedBytes: number,
 ): Promise<SaveResult> {
   await mkdir(mediaDir(), { recursive: true });
 
@@ -137,6 +143,18 @@ export async function saveStream(
       ),
       createWriteStream(mediaPath(id)),
     );
+
+    if (expectedBytes > 0 && bytes !== expectedBytes) {
+      await deleteFile(id);
+      return {
+        ok: false,
+        reason:
+          `Die Datei kam nur zu ${Math.round((bytes / expectedBytes) * 100)} % an ` +
+          `(${formatBytes(bytes)} von ${formatBytes(expectedBytes)}). ` +
+          `Die Verbindung ist wohl abgerissen — bitte noch einmal versuchen.`,
+      };
+    }
+
     return { ok: true, bytes };
   } catch (err) {
     await deleteFile(id);
@@ -148,6 +166,121 @@ export async function saveStream(
     }
     console.error("[media] Schreiben fehlgeschlagen:", err);
     return { ok: false, reason: "Die Datei konnte nicht gespeichert werden." };
+  }
+}
+
+export type ProbeResult = { ok: true } | { ok: false; reason: string };
+
+/** Runaway guard: a real file has a handful of top-level boxes, not thousands. */
+const MAX_BOXES = 2000;
+
+const INCOMPLETE =
+  "Die Datei ist unvollständig — der Index am Ende des Videos fehlt. " +
+  "Meist ist der Upload abgerissen. Bitte lade sie noch einmal hoch.";
+
+/**
+ * Walk the top-level MP4 boxes and check the file hangs together.
+ *
+ * Only box headers are read (a seek each), so this costs a handful of reads
+ * even for a 300 MB file. It catches the two failure modes that produce a
+ * player which shows controls and then does nothing when you press play:
+ * a box that runs past the end of the file, and a missing `moov` — the index
+ * without which no browser can start playback.
+ */
+async function probeMp4(path: string, size: number): Promise<ProbeResult> {
+  // turbopackIgnore as in mediaPath(): a runtime path, not a module reference.
+  const handle = await open(/*turbopackIgnore: true*/ path, "r");
+  try {
+    const header = Buffer.alloc(16);
+    let offset = 0;
+    let sawFtyp = false;
+    let sawMoov = false;
+
+    for (let i = 0; i < MAX_BOXES && offset + 8 <= size; i++) {
+      const { bytesRead } = await handle.read(header, 0, 16, offset);
+      if (bytesRead < 8) break;
+
+      let boxSize = header.readUInt32BE(0);
+      const type = header.toString("latin1", 4, 8);
+      let headerSize = 8;
+
+      if (boxSize === 1) {
+        if (bytesRead < 16) break;
+        boxSize = Number(header.readBigUInt64BE(8));
+        headerSize = 16;
+      } else if (boxSize === 0) {
+        // Legacy "runs to the end of the file".
+        boxSize = size - offset;
+      }
+
+      // Box types are four printable characters. Anything else means we are
+      // not reading an MP4 at all.
+      if (!/^[\x20-\x7e]{4}$/.test(type) || boxSize < headerSize) {
+        return {
+          ok: false,
+          reason:
+            "Die Datei sieht nicht wie ein MP4-Video aus. Bitte wandle sie in " +
+            "MP4 (H.264/AAC) um und lade sie neu hoch.",
+        };
+      }
+      if (offset + boxSize > size) return { ok: false, reason: INCOMPLETE };
+
+      if (type === "ftyp") sawFtyp = true;
+      if (type === "moov") sawMoov = true;
+      offset += boxSize;
+    }
+
+    if (!sawFtyp && !sawMoov) {
+      return {
+        ok: false,
+        reason:
+          "Die Datei sieht nicht wie ein MP4-Video aus. Bitte wandle sie in " +
+          "MP4 (H.264/AAC) um und lade sie neu hoch.",
+      };
+    }
+    if (!sawMoov) return { ok: false, reason: INCOMPLETE };
+    return { ok: true };
+  } finally {
+    await handle.close();
+  }
+}
+
+/** WebM/Matroska starts with the EBML magic number. */
+async function probeWebm(path: string): Promise<ProbeResult> {
+  const handle = await open(/*turbopackIgnore: true*/ path, "r");
+  try {
+    const magic = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(magic, 0, 4, 0);
+    if (bytesRead === 4 && magic.equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      reason: "Die Datei sieht nicht wie ein WebM-Video aus.",
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Sanity-check a stored video before it becomes a row in the database. A file
+ * that fails here would embed fine and refuse to play — much better to say so
+ * at upload time than to leave a dead player on the page.
+ */
+export async function probeVideo(
+  id: string,
+  mimeType: string,
+): Promise<ProbeResult> {
+  try {
+    const { size } = await stat(/*turbopackIgnore: true*/ mediaPath(id));
+    if (size === 0) return { ok: false, reason: INCOMPLETE };
+    return mimeType === "video/webm"
+      ? probeWebm(mediaPath(id))
+      : probeMp4(mediaPath(id), size);
+  } catch (err) {
+    console.error(`[media] Prüfung von ${id} fehlgeschlagen:`, err);
+    return { ok: false, reason: "Die Datei ließ sich nicht prüfen." };
   }
 }
 

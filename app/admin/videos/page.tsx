@@ -50,7 +50,9 @@ export default async function AdminVideosPage() {
         </div>
         <p className="mt-2 text-xs text-neutral-500">
           Lade fertige MP4-Dateien hoch (H.264/AAC) — die Seite rechnet Videos
-          nicht um. Die Dateien liegen auf dem Server und sind in keinem Backup:
+          nicht um. Warte, bis der Balken bei 100 % ist: unvollständige Uploads
+          werden abgelehnt, damit kein Video entsteht, das sich nicht abspielen
+          lässt. Die Dateien liegen auf dem Server und sind in keinem Backup:
           bewahre die Originale bei dir auf.
         </p>
       </div>

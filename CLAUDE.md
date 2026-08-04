@@ -73,6 +73,14 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   ist die einzige Stelle, die die Platte anfasst, und prüft vor jedem Upload
   echten freien Plattenplatz (`statfs`) — Postgres teilt sich die Platte.
   Kein Transkodieren: hochgeladen wird fertiges MP4/WebM.
+  **Nach dem Schreiben läuft `probeVideo`** (MP4-Box-Struktur: `ftyp` + `moov`,
+  keine Box über EOF hinaus; WebM: EBML-Magic) — ohne diese Prüfung wird ein
+  abgerissener Upload als Erfolg verbucht und ergibt ein Video, das eingebettet
+  wird und beim Play nichts tut (genau so 2026-08-04 in Produktion passiert:
+  10 MB von 51 MB, `moov` fehlte). Ein Abgleich mit `content-length` gibt es
+  zusätzlich, er greift aber nur, wenn der Header bis zur App durchkommt —
+  hinter Traefik kam er nicht an, deshalb ist die Strukturprüfung die tragende
+  Sicherung.
 - **Statische Seiten sind ein fixes Set** (impressum/datenschutz/agb):
   editierbar, aber nicht anleg-/löschbar. Seed (`scripts/seed.mjs`) ist
   idempotent; erster Admin entsteht nur, solange kein Admin existiert.

@@ -9,6 +9,7 @@ import {
   deleteFile,
   hasRoomFor,
   maxFileBytes,
+  probeVideo,
   saveStream,
 } from "@/lib/media";
 
@@ -71,8 +72,19 @@ export async function POST(request: NextRequest): Promise<Response> {
   if (!room.ok) return fail(room.reason, 413);
 
   const id = randomUUID();
-  const saved = await saveStream(id, request.body, maxFileBytes());
+  const saved = await saveStream(id, request.body, maxFileBytes(), announced);
   if (!saved.ok) return fail(saved.reason, 413);
+
+  // Everything arrived — but does it hang together? A half video whose index is
+  // missing embeds happily and then refuses to play, so it must never become a
+  // row. Posters are left alone: a broken image is visibly broken.
+  if (kind === "video") {
+    const probe = await probeVideo(id, mimeType);
+    if (!probe.ok) {
+      await deleteFile(id);
+      return fail(probe.reason, 422);
+    }
+  }
 
   try {
     const row = await db.transaction(async (tx) => {
