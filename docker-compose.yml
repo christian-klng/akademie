@@ -1,18 +1,25 @@
-# Stack for Coolify. The web/migrate images are built by GitHub Actions
-# (.github/workflows/build-images.yml) and pushed to ghcr.io — Coolify only
-# pulls them, the server never compiles anything. To build locally instead:
-# `docker build --target runner -t akademie-web .` (or `--target migrator`).
-# Coolify injects env vars from its UI — but ONLY into services whose
-# `environment:` block references them. Every var the app needs is therefore
-# listed explicitly below. The ${VAR:-default} fallbacks let the stack run
-# locally without a .env file.
+# Postgres for the Kubikraum Akademie — and nothing else.
+#
+# The app itself is NOT here any more. It runs as a Coolify *Application*
+# resource pulling ghcr.io/christian-klng/akademie-web:latest, because Coolify
+# does rolling updates only for applications, never for compose stacks. That
+# rebuild is what keeps a failed deploy from taking the site offline; see
+# CLAUDE.md → Deployment.
+#
+# The database deliberately stayed put: same service, same `db-data` volume, no
+# dump and restore. `media-data` also lives on here and is mounted into the
+# application as persistent storage — the files are never copied anywhere.
+#
+# Coolify injects env vars from its UI, but ONLY into services whose
+# `environment:` block references them. The ${VAR:-default} fallbacks let this
+# run locally without a .env file.
 
 services:
   db:
     image: postgres:18
-    # Deliberately NO `pull_policy: always` here (unlike web/migrate): pulling a
-    # new Postgres patch release on every deploy is not something a database
-    # should do unattended. Update this one on purpose.
+    # Deliberately NO `pull_policy: always`: pulling a new Postgres patch
+    # release on every deploy is not something a database should do unattended.
+    # Update this one on purpose.
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-akademie}
@@ -23,71 +30,22 @@ services:
       # /var/lib/postgresql/<major>/docker. Mounting the old …/data path would
       # write the cluster OUTSIDE the volume (data loss on container recreate).
       - db-data:/var/lib/postgresql
+    networks:
+      # Coolify's shared network — this is how the application container
+      # reaches the database. Without it the two resources can't see each other.
+      - coolify
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-akademie}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  # One-shot: applies the drizzle schema (push --force) and runs the idempotent
-  # seed (first admin from ADMIN_EMAIL/ADMIN_PASSWORD, static pages, sample event).
-  migrate:
-    image: ghcr.io/christian-klng/akademie-migrate:latest
-    # `latest` is a moving tag: once the host has pulled it, `compose up` reuses
-    # the cached copy and never sees a newer push. That silently deploys stale
-    # code while the UI still reports the current commit. Always pull instead.
-    pull_policy: always
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: "no"
-
-  web:
-    image: ghcr.io/christian-klng/akademie-web:latest
-    # Same moving-tag problem as `migrate` above.
-    pull_policy: always
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-akademie}:${POSTGRES_PASSWORD:-akademie}@db:5432/${POSTGRES_DB:-akademie}
-      SESSION_SECRET: ${SESSION_SECRET:-dev-only-session-secret-change-me}
-      SITE_URL: ${SITE_URL:-https://kubikraum.academy}
-      # Registration mails. Empty SMTP_HOST on purpose: the app then logs the
-      # mail instead of failing, so a sign-up is never lost to a mail outage.
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      NOTIFY_EMAIL: ${NOTIFY_EMAIL:-}
-      # Stripe webhook signing secret — only needed for paid events.
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      # Uploaded videos. MEDIA_DIR must match the volume mount below. The two
-      # limits are a guard rail for the host disk, which Postgres shares — a
-      # full disk takes the database down, not just the next upload.
-      MEDIA_DIR: /data/media
-      MEDIA_MAX_FILE_MB: ${MEDIA_MAX_FILE_MB:-300}
-      MEDIA_MAX_TOTAL_MB: ${MEDIA_MAX_TOTAL_MB:-2000}
-      MEDIA_MAX_IMAGE_MB: ${MEDIA_MAX_IMAGE_MB:-8}
-      # Quiz evaluation via Cortecs AI. Empty default on purpose: without a key
-      # the quiz reports "nicht verfügbar" instead of erroring per answer.
-      CORTECS_API_KEY: ${CORTECS_API_KEY:-}
-      CORTECS_MODEL: ${CORTECS_MODEL:-claude-haiku-4-5}
-    depends_on:
-      db:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    volumes:
-      # Uploaded videos have to outlive the container: every deploy replaces it.
-      - media-data:/data/media
-    ports:
-      - "3000:3000"
-
 volumes:
   db-data:
-  # NOT covered by any backup — keep the original video files elsewhere.
+  # Holds the uploaded videos and event images, mounted into the application.
+  # NOT covered by any backup — keep the original files elsewhere.
   media-data:
+
+networks:
+  coolify:
+    external: true

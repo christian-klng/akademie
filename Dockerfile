@@ -1,20 +1,16 @@
 # syntax=docker/dockerfile:1
 
-# Standalone Next.js image for the Kubikraum Akademie site, plus a `migrator`
-# stage used by the one-shot `migrate` compose service (drizzle-kit push + seed).
+# Runtime image for the Kubikraum Akademie site. The container migrates the
+# schema on start and only then serves (scripts/start.sh) — that is what makes
+# Coolify's rolling update safe: the previous container keeps serving until this
+# one reports healthy, so a failed migration aborts the deploy instead of taking
+# the site down.
 
-# ---- deps: install full node_modules (used by builder + migrator) ----
+# ---- deps: install full node_modules (used by builder + runner) ----
 FROM node:24-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-
-# ---- migrator: applies the schema + seeds (one-shot compose service) ----
-FROM node:24-slim AS migrator
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-CMD ["npm", "run", "migrate"]
 
 # ---- builder: compile the Next.js standalone output ----
 FROM node:24-slim AS builder
@@ -29,7 +25,7 @@ ENV DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
 ENV SESSION_SECRET=build-time-placeholder-secret-build-time-placeholder
 RUN npm run build
 
-# ---- runner: minimal runtime image ----
+# ---- runner: the only image that ships ----
 FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
@@ -49,6 +45,22 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
+# Migration toolkit. The standalone output ships a pruned node_modules; the full
+# one is a superset, so overlaying it is safe — and it must come AFTER the
+# standalone copy for exactly that reason. drizzle-kit reads the TypeScript
+# schema directly, hence lib/ and drizzle.config.ts as source.
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json drizzle.config.ts ./
+COPY --chown=node:node lib ./lib
+COPY --chown=node:node --chmod=0755 scripts ./scripts
+
 USER node
 EXPOSE 3000
-CMD ["node", "server.js"]
+
+# node:24-slim carries neither curl nor wget (checked), so the probe runs in
+# Node. The generous start period covers the migration, which happens before the
+# server accepts anything and is slow on the production box.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=180s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["./scripts/start.sh"]

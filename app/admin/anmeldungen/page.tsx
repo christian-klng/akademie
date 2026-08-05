@@ -2,7 +2,8 @@ import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
 import { Download } from "lucide-react";
 import { db, schema } from "@/lib/db";
-import { formatShortDate } from "@/lib/format";
+import { formatRelative, formatShortDate } from "@/lib/format";
+import { isReservationActive } from "@/lib/reservation";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import {
   cancelRegistration,
@@ -26,20 +27,38 @@ const HINWEISE: Record<string, string> = {
 };
 
 const badge = "rounded-full px-2.5 py-0.5 text-xs font-medium";
+const neutralBadge = `${badge} bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400`;
+
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   angemeldet: {
     label: "Angemeldet",
     className: `${badge} bg-success/15 text-success`,
   },
-  warteliste: {
-    label: "Warteliste",
-    className: `${badge} bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400`,
-  },
+  warteliste: { label: "Warteliste", className: neutralBadge },
   storniert: {
     label: "Storniert",
     className: `${badge} bg-danger/15 text-danger`,
   },
 };
+
+/**
+ * "reserviert" reads differently depending on the clock: while the deadline
+ * runs it holds a seat, afterwards it holds nothing (lib/reservation.ts).
+ */
+function statusBadge(
+  r: { status: string; reservedUntil: Date | null },
+  now: Date,
+): { label: string; className: string } {
+  if (r.status === "reserviert") {
+    return isReservationActive(r, now)
+      ? {
+          label: "Platz reserviert",
+          className: `${badge} bg-warning/25 text-neutral-900 dark:text-warning`,
+        }
+      : { label: "Reservierung abgelaufen", className: neutralBadge };
+  }
+  return STATUS_BADGE[r.status] ?? STATUS_BADGE.angemeldet;
+}
 
 const actionClass =
   "rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900";
@@ -77,12 +96,21 @@ export default async function AnmeldungenPage({
     ? await rowsQuery.where(eq(schema.registration.eventId, eventId))
     : await rowsQuery;
 
+  // One timestamp for the whole render, so every row is judged against the
+  // same moment.
+  const now = new Date();
+
   const confirmed = rows.filter(
     (r) => r.registration.status === "angemeldet",
   ).length;
   const waiting = rows.filter(
     (r) => r.registration.status === "warteliste",
   ).length;
+  const reserved = rows.filter((r) =>
+    isReservationActive(r.registration, now),
+  ).length;
+  // Sign-ups holding a seat without having paid. Since paid events reserve
+  // first, this is now mostly older rows and hand-confirmed ones.
   const openPayments = rows.filter(
     (r) =>
       r.registration.status === "angemeldet" &&
@@ -145,6 +173,7 @@ export default async function AnmeldungenPage({
 
       <p className="mt-4 text-sm text-neutral-500">
         {confirmed} angemeldet · {waiting} auf der Warteliste
+        {reserved > 0 && ` · ${reserved} reserviert`}
         {openPayments > 0 && ` · ${openPayments} Zahlung offen`}
       </p>
 
@@ -156,7 +185,7 @@ export default async function AnmeldungenPage({
         ) : (
           <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {rows.map(({ registration: r, eventTitle, eventIsPaid }) => {
-              const status = STATUS_BADGE[r.status] ?? STATUS_BADGE.angemeldet;
+              const status = statusBadge(r, now);
               return (
                 <li key={r.id} className="px-5 py-4">
                   <div className="flex items-start justify-between gap-4">
@@ -174,6 +203,10 @@ export default async function AnmeldungenPage({
                       )}
                       <p className="mt-1 text-xs text-neutral-500">
                         Angemeldet am {formatShortDate(r.createdAt)}
+                        {/* Only while it runs — an expired one says so in its badge. */}
+                        {isReservationActive(r, now) &&
+                          r.reservedUntil &&
+                          ` · Reservierung läuft ${formatRelative(r.reservedUntil, now)} ab`}
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -209,7 +242,10 @@ export default async function AnmeldungenPage({
                         </button>
                       </form>
                     )}
-                    {r.status === "angemeldet" &&
+                    {/* Confirms a reservation by hand — for a payment the
+                        webhook never delivered, or a bank transfer. */}
+                    {(r.status === "reserviert" ||
+                      r.status === "angemeldet") &&
                       r.paymentStatus === "offen" && (
                         <form action={markPaid.bind(null, r.id)}>
                           <button type="submit" className={actionClass}>

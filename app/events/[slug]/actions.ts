@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, count, eq, or } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { readField } from "@/lib/form";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -11,6 +11,11 @@ import {
   confirmationMail,
   waitlistMail,
 } from "@/lib/mail-templates";
+import {
+  CHECKOUT_HOLD_MS,
+  occupiesSeat,
+  reservationDeadline,
+} from "@/lib/reservation";
 import { checkoutUrlFor } from "@/lib/stripe";
 import type { Event, Registration } from "@/lib/schema";
 
@@ -70,6 +75,8 @@ export async function registerForEvent(
     };
   }
 
+  const now = new Date();
+
   // One transaction, with the event row locked: two people clicking at the same
   // moment can't both take the last seat, and a double submit can't create two
   // rows for the same address.
@@ -84,9 +91,12 @@ export async function registerForEvent(
     if (!event) return { ok: false, error: "Diese Veranstaltung gibt es nicht." };
     if (!event.registrationOpen)
       return { ok: false, error: "Die Anmeldung für dieses Event ist geschlossen." };
-    if (event.startsAt.getTime() <= Date.now())
+    if (event.startsAt.getTime() <= now.getTime())
       return { ok: false, error: "Dieses Event hat schon stattgefunden." };
 
+    // An address is blocked while it holds a seat or waits for one. A cancelled
+    // sign-up and an expired reservation block nothing — abandoning the Stripe
+    // checkout must not lock someone out of their own event for good.
     const [existing] = await tx
       .select({ id: schema.registration.id })
       .from(schema.registration)
@@ -94,7 +104,7 @@ export async function registerForEvent(
         and(
           eq(schema.registration.eventId, event.id),
           eq(schema.registration.email, email),
-          ne(schema.registration.status, "storniert"),
+          or(occupiesSeat(now), eq(schema.registration.status, "warteliste")),
         ),
       )
       .limit(1);
@@ -111,28 +121,56 @@ export async function registerForEvent(
         .select({ n: count() })
         .from(schema.registration)
         .where(
-          and(
-            eq(schema.registration.eventId, event.id),
-            eq(schema.registration.status, "angemeldet"),
-          ),
+          and(eq(schema.registration.eventId, event.id), occupiesSeat(now)),
         );
       full = (seats?.n ?? 0) >= event.capacity;
     }
 
-    const [registration] = await tx
-      .insert(schema.registration)
-      .values({
-        eventId: event.id,
-        name,
-        email,
-        message,
-        status: full ? "warteliste" : "angemeldet",
-        // Nobody pays for a waiting-list spot — that only starts once a seat
-        // actually opens up (admin "nachrücken").
-        paymentStatus:
-          !full && event.stripeCheckoutUrl ? "offen" : "kostenlos",
-      })
-      .returning();
+    // A paid event hands out a hold, not a seat: "reserviert" until Stripe
+    // reports the money (app/api/stripe/webhook/route.ts) or the deadline
+    // passes. A free event is confirmed right here.
+    const paid = Boolean(event.stripeCheckoutUrl);
+    const holdsSeat = !full && paid;
+
+    const values = {
+      name,
+      message,
+      status: full ? "warteliste" : paid ? "reserviert" : "angemeldet",
+      // Nobody pays for a waiting-list spot — that only starts once a seat
+      // actually opens up (admin "nachrücken").
+      paymentStatus: holdsSeat ? "offen" : "kostenlos",
+      reservedUntil: holdsSeat
+        ? reservationDeadline(CHECKOUT_HOLD_MS, now)
+        : null,
+      updatedAt: now,
+    };
+
+    // Coming back after an abandoned checkout rewrites the expired reservation
+    // instead of leaving a second row behind. Any reservation found here is
+    // expired by definition — a running one would have been caught above.
+    // "storniert" is never reused: that is an admin's decision and stays put.
+    const [stale] = await tx
+      .select({ id: schema.registration.id })
+      .from(schema.registration)
+      .where(
+        and(
+          eq(schema.registration.eventId, event.id),
+          eq(schema.registration.email, email),
+          eq(schema.registration.status, "reserviert"),
+        ),
+      )
+      .limit(1);
+
+    const [registration] = stale
+      ? await tx
+          .update(schema.registration)
+          .set(values)
+          .where(eq(schema.registration.id, stale.id))
+          .returning()
+      : await tx
+          .insert(schema.registration)
+          .values({ eventId: event.id, email, ...values })
+          .returning();
 
     return { ok: true, event, registration };
   });
@@ -143,16 +181,18 @@ export async function registerForEvent(
 
   // Mails come after the commit and never block the outcome: the sign-up is
   // saved, a failed mail is logged (lib/mail.ts) and nothing is rolled back.
+  // "reserviert" deliberately gets nothing — the visitor is on their way to
+  // Stripe, and the confirmation belongs to the payment, not to the attempt.
   if (registration.status === "warteliste") {
     await sendMail(waitlistMail(event, registration));
-  } else if (!event.stripeCheckoutUrl) {
+  } else if (registration.status === "angemeldet") {
     await sendMail(confirmationMail(event, registration));
   }
   await sendMail(adminNoticeMail(notifyAddress(), event, registration));
 
-  // Paid event with a seat: hand the visitor to Stripe. The confirmation mail
-  // waits for the webhook (app/api/stripe/webhook/route.ts).
-  if (registration.status === "angemeldet" && event.stripeCheckoutUrl) {
+  // Reserved seat: hand the visitor to Stripe. Everything that makes this a
+  // real sign-up happens in the webhook (app/api/stripe/webhook/route.ts).
+  if (registration.status === "reserviert") {
     redirect(checkoutUrlFor(event.stripeCheckoutUrl, registration.id, email));
   }
 

@@ -1,7 +1,12 @@
-import { eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { sendMail } from "@/lib/mail";
-import { confirmationMail } from "@/lib/mail-templates";
+import { notifyAddress, sendMail } from "@/lib/mail";
+import {
+  confirmationMail,
+  paidWithoutSeatMail,
+  waitlistAfterPaymentMail,
+} from "@/lib/mail-templates";
+import { isReservationActive, occupiesSeat } from "@/lib/reservation";
 import {
   PAID_EVENT_TYPES,
   hasStripeSecret,
@@ -75,45 +80,122 @@ export async function POST(request: Request): Promise<Response> {
     return new Response("not paid", { status: 200 });
   }
 
-  const [registration] = await db
-    .select()
-    .from(schema.registration)
-    .where(eq(schema.registration.id, registrationId))
-    .limit(1);
+  const now = new Date();
 
-  if (!registration) {
+  // The payment is what turns a held seat into a real sign-up, so this runs in
+  // the same shape as the sign-up itself: event row locked, seats counted
+  // inside the transaction. Without the lock, a payment arriving after its
+  // reservation expired could overbook the event.
+  const result = await db.transaction(async (tx) => {
+    const [registration] = await tx
+      .select()
+      .from(schema.registration)
+      .where(eq(schema.registration.id, registrationId))
+      .limit(1);
+    if (!registration) return { kind: "unknown" } as const;
+
+    // Stripe redelivers on any non-2xx and on manual resends. Second time
+    // round there is nothing left to do — and no second confirmation mail.
+    if (registration.paymentStatus === "bezahlt") {
+      return { kind: "duplicate" } as const;
+    }
+
+    const [event] = await tx
+      .select()
+      .from(schema.event)
+      .where(eq(schema.event.id, registration.eventId))
+      .limit(1)
+      .for("update");
+    if (!event) return { kind: "unknown" } as const;
+
+    // Is the seat still there? A running reservation counts itself, so paying
+    // in time always fits. Past the deadline the seat may have been taken by
+    // someone else in the meantime — a late payment is still honoured when
+    // nobody took it.
+    //
+    // "storniert" is the exception: an admin decided this sign-up is off, and
+    // a payment must not quietly undo that. The money is recorded, the status
+    // stays, and the notice below puts it in front of a human.
+    const cancelled = registration.status === "storniert";
+
+    let seatAvailable = false;
+    if (!cancelled) {
+      if (event.capacity === null || isReservationActive(registration, now)) {
+        seatAvailable = true;
+      } else {
+        const [seats] = await tx
+          .select({ n: count() })
+          .from(schema.registration)
+          .where(
+            and(eq(schema.registration.eventId, event.id), occupiesSeat(now)),
+          );
+        seatAvailable = (seats?.n ?? 0) < event.capacity;
+      }
+    }
+
+    const [updated] = await tx
+      .update(schema.registration)
+      .set({
+        // Paid without a seat: park it on the waiting list rather than
+        // overbook. An admin decides — refund or move someone up.
+        status: cancelled
+          ? "storniert"
+          : seatAvailable
+            ? "angemeldet"
+            : "warteliste",
+        paymentStatus: "bezahlt",
+        reservedUntil: null,
+        stripeSessionId: session.id ?? "",
+        paidAt: now,
+        updatedAt: now,
+      })
+      .where(eq(schema.registration.id, registration.id))
+      .returning();
+
+    return {
+      kind: "paid",
+      event,
+      registration: updated,
+      seatAvailable,
+      cancelled,
+    } as const;
+  });
+
+  if (result.kind === "unknown") {
     console.warn(`[stripe] Anmeldung ${registrationId} nicht gefunden`);
     return new Response("unknown registration", { status: 200 });
   }
-
-  // Stripe redelivers on any non-2xx and on manual resends. Second time round
-  // there is nothing left to do — and no second confirmation mail.
-  if (registration.paymentStatus === "bezahlt") {
+  if (result.kind === "duplicate") {
     return new Response("already paid", { status: 200 });
   }
 
-  const [updated] = await db
-    .update(schema.registration)
-    .set({
-      paymentStatus: "bezahlt",
-      stripeSessionId: session.id ?? "",
-      paidAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(schema.registration.id, registration.id))
-    .returning();
+  const { event, registration, seatAvailable, cancelled } = result;
 
-  const [event] = await db
-    .select()
-    .from(schema.event)
-    .where(eq(schema.event.id, registration.eventId))
-    .limit(1);
+  if (seatAvailable) {
+    console.info(
+      `[stripe] ${type}: Anmeldung ${registration.id} bezahlt und bestätigt`,
+    );
+    await sendMail(confirmationMail(event, registration));
+    return new Response("ok", { status: 200 });
+  }
 
-  console.info(
-    `[stripe] ${type}: Anmeldung ${registration.id} als bezahlt markiert`,
+  // Loud on purpose: money arrived for a seat we can't hand out.
+  console.error(
+    `[stripe] ${type}: Anmeldung ${registration.id} bezahlt, aber ${
+      cancelled ? "storniert" : `${event.title} ist voll`
+    } — bitte prüfen`,
   );
-
-  if (event) await sendMail(confirmationMail(event, updated));
+  await sendMail(
+    paidWithoutSeatMail(
+      notifyAddress(),
+      event,
+      registration,
+      cancelled ? "storniert" : "voll",
+    ),
+  );
+  // Only the "full" case gets an automatic reply: there the person is simply
+  // next in line. A cancelled sign-up needs a human, not a template.
+  if (!cancelled) await sendMail(waitlistAfterPaymentMail(event, registration));
 
   return new Response("ok", { status: 200 });
 }

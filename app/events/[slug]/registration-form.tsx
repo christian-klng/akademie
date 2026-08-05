@@ -14,12 +14,19 @@ export function RegistrationForm({
   slug,
   isFull,
   isPaid,
+  holdMinutes,
 }: {
   slug: string;
   /** All seats taken — the form still works, it just books a waiting-list spot. */
   isFull: boolean;
   /** Paid event: submitting leads to Stripe. */
   isPaid: boolean;
+  /**
+   * How long the seat is held during checkout. Passed in rather than imported:
+   * lib/reservation.ts pulls in drizzle, which has no business in a client
+   * bundle.
+   */
+  holdMinutes: number;
 }) {
   const [state, formAction, pending] = useActionState(
     registerForEvent,
@@ -118,8 +125,10 @@ export function RegistrationForm({
 
       {isPaid && !isFull && (
         <p className="text-xs text-neutral-500">
-          Nach dem Absenden geht es weiter zur Bezahlung über Stripe. Erst danach
-          ist dein Platz sicher.
+          Nach dem Absenden geht es weiter zur Bezahlung über Stripe. Wir halten
+          deinen Platz {holdMinutes} Minuten lang frei. Fest angemeldet bist du,
+          sobald deine Zahlung durch ist — dann kommt auch die Bestätigung per
+          E-Mail.
         </p>
       )}
     </form>

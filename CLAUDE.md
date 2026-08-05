@@ -58,18 +58,35 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
   serialisieren → Drift auf Nicht-UTC-Maschinen). Nicht auf `timestamptz`
   umstellen, ohne alle Seiten anzupassen.
 - **Anmeldungen:** Öffentliches Formular auf `/events/<slug>` schreibt in
-  `registration`. Ein Platz gilt als belegt, sobald `status = "angemeldet"`
-  (unabhängig von der Zahlung); `warteliste`/`storniert` zählen nicht. Die
-  Sitzplatz-Prüfung läuft in einer Transaktion mit `SELECT … FOR UPDATE` auf
-  der Event-Zeile — sie verhindert Überbuchung UND Doppelanmeldungen, deshalb
-  gibt es bewusst keinen Unique-Index auf `(event_id, email)`.
-  `stripe_checkout_url` ist die einzige Wahrheit über kostenlos/bezahlt;
-  `price` bleibt reiner Anzeigetext. Bezahlt = Redirect auf den Stripe Payment
-  Link mit `client_reference_id=<registration.id>`, Bestätigung erst durch den
-  Webhook (`app/api/stripe/webhook/route.ts`, HMAC-Prüfung in `lib/stripe.ts`
-  über den **rohen** Body — `req.text()`, nie geparstes JSON). Mails laufen
-  über `lib/mail.ts` (nodemailer, lazy wie `lib/db.ts`); ohne `SMTP_HOST`
-  werden sie nur geloggt, eine Anmeldung darf nie an einer Mail scheitern.
+  `registration`. **Belegt ist ein Platz durch `status = "angemeldet"` ODER
+  eine `"reserviert"`-Zeile, deren `reserved_until` noch in der Zukunft
+  liegt** — `lib/reservation.ts` (`occupiesSeat()`) ist die einzige Stelle,
+  die das ausformuliert; alle Zählstellen rufen sie auf, sonst driften sie
+  auseinander. `warteliste`, `storniert` und abgelaufene Reservierungen zählen
+  nicht. Die Sitzplatz-Prüfung läuft in einer Transaktion mit
+  `SELECT … FOR UPDATE` auf der Event-Zeile — sie verhindert Überbuchung UND
+  Doppelanmeldungen, deshalb gibt es bewusst keinen Unique-Index auf
+  `(event_id, email)`. `stripe_checkout_url` ist die einzige Wahrheit über
+  kostenlos/bezahlt; `price` bleibt reiner Anzeigetext.
+- **Bezahlt heißt: erst zahlen, dann Platz.** Die Anmeldung entsteht als
+  `"reserviert"` mit 30-Minuten-Frist (`CHECKOUT_HOLD_MS`; beim Nachrücken
+  48 Stunden, weil die Person auf eine Mail reagiert), dann Redirect auf den
+  Stripe Payment Link mit `client_reference_id=<registration.id>`. Erst der
+  Webhook macht daraus `"angemeldet"` und schickt die Bestätigung
+  (`app/api/stripe/webhook/route.ts`, HMAC-Prüfung in `lib/stripe.ts` über den
+  **rohen** Body — `req.text()`, nie geparstes JSON). Er läuft in derselben
+  Transaktionsform wie die Anmeldung (Event-Zeile gelockt), sonst könnte eine
+  Zahlung nach Fristablauf überbuchen. **Es gibt keinen Cleanup-Job**: eine
+  abgelaufene Reservierung fällt allein durch den Zeitvergleich aus der
+  Zählung. Kommt sie zurück, wird ihre Zeile überschrieben statt eine zweite
+  anzulegen. Drei Ausgänge im Webhook: Platz frei → `angemeldet`; kein Platz
+  mehr → `warteliste` + Alarm-Mail an den Admin + Info an die Person; vorher
+  vom Admin storniert → bleibt `storniert` + Alarm-Mail (eine Zahlung darf
+  eine Stornierung nicht still zurücknehmen). Wer schon bezahlt hat und
+  nachrückt, wird direkt `angemeldet` — nie erneut zur Kasse gebeten.
+  Mails laufen über `lib/mail.ts` (nodemailer, lazy wie `lib/db.ts`); ohne
+  `SMTP_HOST` werden sie nur geloggt, eine Anmeldung darf nie an einer Mail
+  scheitern.
 - **Videos liegen auf dem Volume `media-data`** (`MEDIA_DIR`, Default
   `/data/media`), eine Zeile pro Datei in `media`; die Zeilen-UUID **ist** der
   Dateiname — nichts aus einem Request landet je in einem Pfad. Upload ist eine

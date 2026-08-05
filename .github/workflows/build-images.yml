@@ -1,7 +1,14 @@
-# Builds the two Docker images (web + migrate) on every push to main and
-# pushes them to the GitHub Container Registry. Coolify no longer builds
-# anything itself — docker-compose.yml references these images (`image:`
-# instead of `build:`), so a deploy on the server is just a pull + up.
+# Builds the runtime image on every push to main and pushes it to the GitHub
+# Container Registry. Coolify never builds anything itself — it pulls this image.
+#
+# One image, not two: the container migrates the schema on start
+# (scripts/start.sh), so the separate `migrate` image is gone. That also halves
+# the pushes to GHCR, which hit a secondary rate limit on 2026-08-04 and left a
+# half-updated pair of images on the server.
+#
+# The deploy is triggered from HERE, at the end of a successful build. Coolify's
+# own "auto-deploy on push" must stay OFF: it fires seconds after the push, long
+# before this image exists.
 #
 # Optional repo secrets for auto-redeploy after a successful build:
 #   COOLIFY_WEBHOOK — the app's deploy webhook URL (Coolify → app → Webhooks)
@@ -36,7 +43,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push web image (target runner)
+      - name: Build & push runtime image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -49,18 +56,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build & push migrate image (target migrator)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: migrator
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}-migrate:latest
-            ghcr.io/${{ github.repository }}-migrate:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Trigger Coolify redeploy (optional)
         env:

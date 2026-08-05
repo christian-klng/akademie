@@ -57,6 +57,22 @@ export function formatShortDate(d: Date): string {
   }).format(d);
 }
 
+const RELATIVE_FMT = new Intl.RelativeTimeFormat("de-DE", { numeric: "auto" });
+
+/**
+ * "in 12 Minuten", "vor 2 Tagen". Relative on purpose: these are real points in
+ * time, not wall-clock times like the event dates above, so an absolute display
+ * would read two hours off on the UTC production server.
+ */
+export function formatRelative(target: Date, now: Date = new Date()): string {
+  const diffMs = target.getTime() - now.getTime();
+  const minutes = Math.round(diffMs / 60_000);
+  if (Math.abs(minutes) < 60) return RELATIVE_FMT.format(minutes, "minute");
+  const hours = Math.round(diffMs / 3_600_000);
+  if (Math.abs(hours) < 24) return RELATIVE_FMT.format(hours, "hour");
+  return RELATIVE_FMT.format(Math.round(diffMs / 86_400_000), "day");
+}
+
 /** URL slug from a title: lowercase, umlauts transliterated, dashes. */
 export function slugify(s: string): string {
   return s

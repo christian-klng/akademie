@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { countTakenSeats } from "@/lib/queries";
+import { PROMOTION_HOLD_MS, reservationDeadline } from "@/lib/reservation";
 import { sendMail } from "@/lib/mail";
 import { confirmationMail, seatFreeMail } from "@/lib/mail-templates";
 import type { Event, Registration } from "@/lib/schema";
@@ -54,19 +55,40 @@ export async function promoteRegistration(id: string): Promise<void> {
     if (taken >= event.capacity) back(event.id, "voll");
   }
 
+  // A paid event hands out a hold, not a seat — same rule as the public sign-up
+  // (app/events/[slug]/actions.ts). The window is days rather than minutes:
+  // this person is reacting to the mail below, not to their own click.
+  //
+  // Unless they already paid: that happens when a payment landed after the
+  // event had filled up, which parks a paid sign-up on the waiting list
+  // (app/api/stripe/webhook/route.ts). Asking them for money a second time
+  // would be exactly the wrong move — they go straight to a confirmed seat.
+  const alreadyPaid = registration.paymentStatus === "bezahlt";
+  const needsPayment = Boolean(event.stripeCheckoutUrl) && !alreadyPaid;
+  const now = new Date();
+
   const [updated] = await db
     .update(schema.registration)
     .set({
-      status: "angemeldet",
-      // A paid event only gets its seat secured once the money arrives; the
-      // mail below carries the payment link.
-      paymentStatus: event.stripeCheckoutUrl ? "offen" : "kostenlos",
-      updatedAt: new Date(),
+      status: needsPayment ? "reserviert" : "angemeldet",
+      paymentStatus: alreadyPaid
+        ? "bezahlt"
+        : needsPayment
+          ? "offen"
+          : "kostenlos",
+      reservedUntil: needsPayment
+        ? reservationDeadline(PROMOTION_HOLD_MS, now)
+        : null,
+      updatedAt: now,
     })
     .where(eq(schema.registration.id, id))
     .returning();
 
-  await sendMail(seatFreeMail(event, updated));
+  // The "seat is free" mail carries a payment link; someone who has already
+  // paid gets the plain confirmation instead.
+  await sendMail(
+    alreadyPaid ? confirmationMail(event, updated) : seatFreeMail(event, updated),
+  );
   back(event.id, "nachgerueckt");
 }
 
@@ -77,7 +99,7 @@ export async function cancelRegistration(id: string): Promise<void> {
 
   await db
     .update(schema.registration)
-    .set({ status: "storniert", updatedAt: new Date() })
+    .set({ status: "storniert", reservedUntil: null, updatedAt: new Date() })
     .where(eq(schema.registration.id, id));
 
   back(loaded.event.id, "storniert");
@@ -87,10 +109,21 @@ export async function cancelRegistration(id: string): Promise<void> {
 export async function markPaid(id: string): Promise<void> {
   const loaded = await load(id);
   if (!loaded) redirect("/admin/anmeldungen");
+  const now = new Date();
 
   const [updated] = await db
     .update(schema.registration)
-    .set({ paymentStatus: "bezahlt", paidAt: new Date(), updatedAt: new Date() })
+    .set({
+      // Confirms a held seat, exactly like the webhook does. Any other status
+      // is left alone: a waiting-list row must not jump the queue just because
+      // its payment came in — that is what "Nachrücken lassen" is for.
+      ...(loaded.registration.status === "reserviert"
+        ? { status: "angemeldet" as const, reservedUntil: null }
+        : {}),
+      paymentStatus: "bezahlt",
+      paidAt: now,
+      updatedAt: now,
+    })
     .where(eq(schema.registration.id, id))
     .returning();
 

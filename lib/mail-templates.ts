@@ -145,6 +145,59 @@ ${payLine}${signature()}`,
   );
 }
 
+/**
+ * Paid, but every seat was gone by the time the money arrived — the reservation
+ * had run out. Goes to the participant, who must not be left thinking they have
+ * a seat. The refund itself is a manual decision, hence no promise about it.
+ */
+export function waitlistAfterPaymentMail(event: Event, reg: Registration): Mail {
+  return mail(
+    reg.email,
+    `Deine Zahlung ist da — aber der Platz leider nicht: ${event.title}`,
+    `Hallo ${reg.name},
+
+deine Zahlung ist bei uns angekommen — danke dafür. Leider war der letzte Platz vergeben, bevor die Zahlung bei uns war. Das tut uns leid.
+
+${eventBlock(event, false)}
+
+Du stehst jetzt ganz oben auf der Warteliste. Wir melden uns in den nächsten Tagen bei dir und klären mit dir, ob du nachrücken möchtest oder dein Geld zurückbekommst. Du musst nichts weiter tun.
+
+${signature()}`,
+  );
+}
+
+/**
+ * For us: money in the account, no seat behind it. Either the event filled up
+ * while the reservation ran out ("voll"), or an admin had already cancelled the
+ * sign-up ("storniert"). Both need a decision that no code should make alone.
+ */
+export function paidWithoutSeatMail(
+  to: string,
+  event: Event,
+  reg: Registration,
+  reason: "voll" | "storniert",
+): Mail {
+  const lead =
+    reason === "voll"
+      ? `hat bezahlt, aber alle Plätze waren schon vergeben.
+Die Anmeldung steht jetzt auf der Warteliste — die Person hat eine E-Mail dazu bekommen.`
+      : `hat bezahlt, obwohl die Anmeldung storniert war.
+Die Stornierung bleibt bestehen, und die Person hat noch keine Nachricht bekommen.`;
+
+  return mail(
+    to,
+    `Zahlung ohne Platz: ${event.title}`,
+    `${reg.name} <${reg.email}> ${lead}
+
+Veranstaltung: ${event.title}
+Termin: ${when(event)}
+Stripe-Session: ${reg.stripeSessionId || "unbekannt"}
+
+Bitte entscheiden: Platz freimachen oder Zahlung erstatten.
+${SITE_URL}/admin/anmeldungen?event=${event.id}`,
+  );
+}
+
 /** Short internal notice so a new sign-up is visible without opening the admin. */
 export function adminNoticeMail(
   to: string,
@@ -154,9 +207,11 @@ export function adminNoticeMail(
   const status =
     reg.status === "warteliste"
       ? "Warteliste"
-      : reg.paymentStatus === "offen"
-        ? "angemeldet, Zahlung offen"
-        : "angemeldet";
+      : reg.status === "reserviert"
+        ? "Platz reserviert, wartet auf Zahlung"
+        : reg.paymentStatus === "offen"
+          ? "angemeldet, Zahlung offen"
+          : "angemeldet";
 
   return mail(
     to,

@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, gte, inArray, lt, sum } from "drizzle-orm";
 import { db, schema } from "./db";
+import { occupiesSeat } from "./reservation";
 import type { Event, Media, StaticPage } from "./schema";
 
 /**
@@ -66,16 +67,17 @@ export async function listPastEvents(): Promise<Event[]> {
     .orderBy(desc(schema.event.startsAt));
 }
 
-/** Seats taken: confirmed sign-ups only, regardless of payment state. */
+/**
+ * Seats taken: confirmed sign-ups plus reservations that are still running
+ * (lib/reservation.ts). Payment state is irrelevant here — a reservation holds
+ * its seat until it is paid for or expires.
+ */
 export async function countTakenSeats(eventId: string): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(schema.registration)
     .where(
-      and(
-        eq(schema.registration.eventId, eventId),
-        eq(schema.registration.status, "angemeldet"),
-      ),
+      and(eq(schema.registration.eventId, eventId), occupiesSeat()),
     );
   return row?.n ?? 0;
 }

@@ -119,9 +119,16 @@ export const event = pgTable(
 export const EVENT_FORMATS = ["vor_ort", "online"] as const;
 export type EventFormat = (typeof EVENT_FORMATS)[number];
 
-/** Only "angemeldet" occupies a seat — waitlisted and cancelled rows do not. */
+/**
+ * A seat is taken by "angemeldet" and by a "reserviert" row whose
+ * `reservedUntil` is still in the future — see lib/reservation.ts, which is the
+ * only place that spells this out. "warteliste", "storniert" and an expired
+ * reservation take nothing.
+ */
 export const REGISTRATION_STATUSES = [
   "angemeldet",
+  /** Seat held while the visitor is in Stripe checkout; expires on its own. */
+  "reserviert",
   "warteliste",
   "storniert",
 ] as const;
@@ -149,6 +156,13 @@ export const registration = pgTable(
     message: text("message").notNull().default(""),
     status: text("status").notNull().default("angemeldet"),
     paymentStatus: text("payment_status").notNull().default("kostenlos"),
+    /**
+     * When a "reserviert" row stops holding its seat. Null on every other
+     * status. Written and compared as a JS `Date`, like the other timestamps
+     * here — never against Postgres `now()`, which is DB-local while drizzle
+     * reads and writes these naive columns as UTC.
+     */
+    reservedUntil: timestamp("reserved_until", { mode: "date" }),
     /** Stripe checkout session id — kept so a redelivered webhook is a no-op. */
     stripeSessionId: text("stripe_session_id").notNull().default(""),
     paidAt: timestamp("paid_at", { mode: "date" }),

@@ -18,6 +18,7 @@ import {
   formatEventTime,
   toNaiveIso,
 } from "@/lib/format";
+import { CHECKOUT_HOLD_MS } from "@/lib/reservation";
 import { SITE_NAME, SITE_URL, SUPPORT_EMAIL } from "@/lib/site";
 import { RegistrationForm } from "./registration-form";
 
@@ -94,6 +95,7 @@ export default async function EventPage({
   const registrationOpen = isRegistrationOpen(event);
   const started = hasEventStarted(event);
   const video = event.videoId ? await getMedia(event.videoId) : null;
+  const isPaid = Boolean(event.stripeCheckoutUrl);
 
   const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
     `Frage zu: ${event.title}`,
@@ -170,12 +172,15 @@ export default async function EventPage({
               <p className="mt-1 text-sm text-neutral-500">
                 {seats.isFull
                   ? "Trag dich auf die Warteliste ein. Wir melden uns, sobald ein Platz frei wird."
-                  : "Melde dich hier an. Du bekommst gleich eine E-Mail von uns."}
+                  : isPaid
+                    ? "Melde dich hier an. Danach geht es direkt weiter zur Bezahlung."
+                    : "Melde dich hier an. Du bekommst gleich eine E-Mail von uns."}
               </p>
               <RegistrationForm
                 slug={event.slug}
                 isFull={seats.isFull}
-                isPaid={Boolean(event.stripeCheckoutUrl)}
+                isPaid={isPaid}
+                holdMinutes={CHECKOUT_HOLD_MS / 60_000}
               />
             </>
           ) : (
