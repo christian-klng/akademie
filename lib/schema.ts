@@ -11,8 +11,8 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
-// Schema is applied via `drizzle-kit push --force` in the one-shot `migrate`
-// compose service (no TTY). Uniqueness therefore always lives in the table's
+// Schema is applied via `drizzle-kit push --force` when a web container starts
+// (scripts/start.sh), with no TTY. Uniqueness therefore always lives in the table's
 // index array as `uniqueIndex(...)` — a column-level `.unique()` on a populated
 // table makes push prompt ("truncate?") and hang without a TTY.
 

@@ -2,7 +2,8 @@
 
 Homepage + Mini-CMS der **Kubikraum Akademie** (Weiterbildung zu KI/Software
 für Fachexperten und Nicht-Techniker). Eigenständiges Repo, deployt auf
-**Coolify** als Compose-Stack (`db` Postgres 18 + one-shot `migrate` + `web`).
+**Coolify**: `web` als Application (Rolling Update), Postgres 18 als
+Compose-Ressource daneben.
 Design/Layout ist eine Kopie der Kubikraum-Digital-Landing (gleiche Farbtokens,
 Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
 
@@ -14,7 +15,9 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
 - `npm run build` + `npm run lint` — nach jeder inhaltlichen Änderung, beide
   müssen sauber sein.
 - `npm run db:push` — Drizzle-Schema anwenden; `npm run seed` — idempotenter
-  Seed; `npm run migrate` — beides (Kommando des `migrate`-Containers).
+  Seed; `npm run migrate` — beides. Im Container läuft das nicht direkt,
+  sondern über `scripts/start.sh` → `scripts/migrate-with-lock.mjs` (Lock +
+  Zeitlimits), bevor der Server startet.
 
 ## Architektur & Invarianten
 
@@ -131,41 +134,67 @@ Geist-Fonts, `max-w-2xl`-Spalte, Dark-Mode per `.dark`-Klasse).
 
 ## Deployment (Coolify + GitHub Actions)
 
-- **Images baut GitHub Actions** (`.github/workflows/build-images.yml`): Push
-  auf `main` → `ghcr.io/christian-klng/akademie-web` und `…-migrate` →
-  Workflow triggert den Coolify-Deploy-Webhook. Coolify pullt nur
-  (`image:` in `docker-compose.yml`), **der Server baut nie selbst** — das
-  Setup entstand auf einer 4-GB-Box, wo `next build` in den Swap lief. Der
-  aktuelle Server (178.104.69.162) ist größer, sein RAM ist aber nicht
-  nachgemessen; die Pipeline bleibt so, es gibt keinen Grund zurückzubauen.
-  Auto-Deploy-on-Push in Coolify muss AUS bleiben, sonst deployt Coolify,
-  bevor das Image fertig ist.
-- **`web` und `migrate` tragen `pull_policy: always`.** Beide zeigen auf den
-  wandernden Tag `:latest`. Ohne diese Zeile benutzt `compose up` das lokal
-  schon vorhandene Image weiter und deployt still den alten Stand — während
-  Coolify in der Oberfläche den aktuellen Commit anzeigt, weil von dort nur
-  die `docker-compose.yml` stammt. Symptom: Deploy „erfolgreich", Seite alt.
-  `db` bekommt das bewusst NICHT (Datenbank soll nicht ungefragt hochziehen).
-  Der Workflow taggt zusätzlich mit der Commit-SHA — die eignet sich, wenn
-  ein Deploy exakt festgenagelt werden soll.
-- Eine Compose-Resource; Domain auf `web` (Port 3000), HTTPS.
-- **Jede Env-Var muss im `environment:`-Block des Services referenziert
-  sein**, sonst injiziert Coolify sie nicht. Nach Env-Änderung redeployen.
+- **Zwei Coolify-Ressourcen, nicht mehr eine.** `web` ist eine
+  **Application** (Docker Image `ghcr.io/christian-klng/akademie-web:latest`),
+  Postgres bleibt die **Compose-Ressource** aus `docker-compose.yml` — die
+  enthält nur noch `db`. Grund: Coolify macht **Rolling Updates ausschließlich
+  für Applications, nie für Compose-Stacks**. Die Datenbank ist bewusst
+  liegengeblieben (gleiches `db-data`-Volume, kein Dump/Restore).
+- **Die Migration läuft beim Containerstart**, nicht in einem eigenen
+  Service: `scripts/start.sh` → `scripts/migrate-with-lock.mjs` → `server.js`.
+  Das ist die tragende Eigenschaft des Setups: Der neue Container migriert und
+  wird erst danach gesund; bis dahin bedient der **alte** weiter. Scheitert
+  die Migration, wird der neue Container nie gesund, Coolify bricht ab und die
+  Seite bleibt unberührt. Vorher nahm ein stiller Einmal-Container die ganze
+  Seite mit (2026-08-04, ~15 Stunden offline).
+- **Rolling Updates haben vier Bedingungen** — alle vier müssen erfüllt
+  bleiben: funktionierender Healthcheck, Standard-Container-Namen, **kein**
+  Port-Mapping auf den Host (in Coolify nur „Ports Exposes: 3000") und keine
+  Compose-Ressource. Ein `ports:`-Eintrag reicht, um alles davon zu kippen.
+- **Healthcheck ist `/api/health`** (`app/api/health/route.ts`) und geht
+  bewusst **nicht** an die Datenbank — sonst nähme Traefik den Container bei
+  einem kurzen DB-Hänger aus dem Routing und machte aus einer Störung einen
+  Ausfall. Die `HEALTHCHECK`-Instruktion im Dockerfile läuft über Node:
+  `node:24-slim` hat weder curl noch wget.
+- `migrate-with-lock.mjs` hält einen **Postgres-Advisory-Lock** (Key
+  `823641907`), weil beim Rolling Update kurz zwei Container laufen und zwei
+  gleichzeitige `drizzle-kit push` ein Rennen wären. Alle Wartezeiten haben
+  Limits (`DB_WAIT_TIMEOUT_S`, `LOCK_WAIT_TIMEOUT_S`, `MIGRATE_TIMEOUT_S`) —
+  der Startvorgang darf nie stumm hängen.
+- **Ein Image baut GitHub Actions** (`.github/workflows/build-images.yml`):
+  Push auf `main` → `ghcr.io/christian-klng/akademie-web` → **der Workflow**
+  triggert am Ende den Coolify-Deploy-Webhook. **Auto-Deploy-on-Push in
+  Coolify muss AUS bleiben**: es feuert Sekunden nach dem Push, lange bevor
+  das Image existiert — genau so entstand am 2026-08-04 ein Deploy gegen ein
+  halb gepushtes Image-Paar. Das separate `migrate`-Image ist entfallen; das
+  halbiert auch die Pushes ins GHCR, das damals ins Rate-Limit lief.
+- **`pull_policy: always` bzw. „Force pull" bleibt Pflicht.** `:latest` ist
+  ein wandernder Tag; ohne Force-Pull benutzt der Server das lokal vorhandene
+  Image weiter und deployt still den alten Stand, während die Oberfläche den
+  aktuellen Commit anzeigt. Der Workflow taggt zusätzlich mit der Commit-SHA —
+  die eignet sich, wenn ein Deploy exakt festgenagelt werden soll.
+- **Der Server baut nie selbst.** Das Setup entstand auf einer 4-GB-Box, wo
+  `next build` in den Swap lief. Der aktuelle Server (178.104.69.162) ist
+  größer, sein RAM ist aber nicht nachgemessen.
+- **Jede Env-Var muss dort stehen, wo sie gebraucht wird**: bei der
+  Application in ihren Environment Variables, bei `db` im
+  `environment:`-Block der Compose-Datei. Nach Env-Änderung redeployen.
 - **Postgres-18-Image:** Volume-Mount ist `/var/lib/postgresql` (NICHT
   `…/data`) — Daten liegen unter `/var/lib/postgresql/18/docker`.
-- **Zwei Volumes, beide ohne Backup:** `db-data` und `media-data`. Letzteres
-  hält die hochgeladenen Videos; wird es gelöscht, zeigen alle `media`-Zeilen
-  ins Leere (die Auslieferung antwortet dann 404). `/data/media` wird schon im
-  Dockerfile angelegt und `node:node` übereignet — Docker übernimmt beim
-  **ersten** Anlegen eines Volumes Inhalt und Eigentümer des Mountpunkts, sonst
-  gehörte es root und der Container läuft als `node` (Uploads: `EACCES`).
-  Auf dem Server verifiziert (2026-08-04): Rechte stimmen, Platte 38 GB mit
-  ~17 GB frei.
-- **Coolify ist das einzige Deploy-Ziel.** Das Dockerfile hat genau drei
-  Stages, die zählen: `migrator` und `runner` werden vom Workflow explizit
-  per `--target` gebaut, `deps`/`builder` sind Zwischenstufen. Es gibt keine
-  Plattform, die „die letzte Stage" baut — neue Stages dürfen also frei
-  hinten angehängt werden.
+- **Zwei Volumes, beide ohne Backup:** `db-data` (bei der Compose-Ressource)
+  und `media-data` (als Persistent Storage in die Application gemountet).
+  Letzteres hält Videos und Event-Bilder; wird es gelöscht, zeigen alle
+  `media`-Zeilen ins Leere (die Auslieferung antwortet dann 404).
+  `/data/media` wird schon im Dockerfile angelegt und `node:node` übereignet —
+  Docker übernimmt beim **ersten** Anlegen eines Volumes Inhalt und Eigentümer
+  des Mountpunkts, sonst gehörte es root und der Container läuft als `node`
+  (Uploads: `EACCES`). Auf dem Server verifiziert (2026-08-04): Rechte
+  stimmen, Platte 38 GB mit ~17 GB frei.
+- **Das Dockerfile hat nur noch eine Stage, die ausgeliefert wird:** `runner`.
+  Sie trägt neben der Standalone-Ausgabe auch das Migrations-Werkzeug
+  (volle `node_modules`, `lib/`, `scripts/`, `drizzle.config.ts`) — deshalb
+  ist sie groß (~1 GB). Das ist der bewusste Preis dafür, dass der Container
+  sich selbst migrieren kann. `deps`/`builder` sind Zwischenstufen.
 
 ## Konventionen
 

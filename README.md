@@ -43,37 +43,53 @@ ausführen (`npm run seed`).
 - `npm run dev` / `npm run build` / `npm run lint`
 - `npm run db:push` — Drizzle-Schema in die DB pushen
 - `npm run seed` — idempotenter Seed (Admin, statische Seiten, Beispiel-Event)
-- `npm run migrate` — `db:push --force` + Seed (läuft im `migrate`-Container)
+- `npm run migrate` — `db:push --force` + Seed. Im Container läuft das über
+  `scripts/start.sh` → `scripts/migrate-with-lock.mjs`, bevor der Server startet
 
 ## Deploy (GitHub Actions baut, Coolify pullt)
 
 Der Server baut nichts selbst: Bei jedem Push auf `main` baut
-`.github/workflows/build-images.yml` die Images
-`ghcr.io/christian-klng/akademie-web` und `…-migrate`, pusht sie in die
-GitHub Container Registry und stößt (falls die Secrets `COOLIFY_WEBHOOK` +
-`COOLIFY_TOKEN` gesetzt sind) den Coolify-Deploy an. Coolify macht nur noch
-`pull` + `up`.
+`.github/workflows/build-images.yml` das Image
+`ghcr.io/christian-klng/akademie-web`, pusht es in die GitHub Container
+Registry und stößt (falls die Secrets `COOLIFY_WEBHOOK` + `COOLIFY_TOKEN`
+gesetzt sind) den Coolify-Deploy an.
+
+**Zwei Ressourcen in Coolify:**
+
+- **Application** (Docker Image) — die Website. Coolify tauscht sie per
+  *Rolling Update*: Der neue Container startet, wendet das Schema an und
+  bedient erst danach; solange läuft der **alte** weiter. Geht beim Start
+  etwas schief, wird der neue nie gesund, der Deploy bricht ab — und die Seite
+  bleibt unberührt online.
+- **Docker Compose** — nur noch Postgres (`docker-compose.yml`).
 
 Einmalige Einrichtung:
 
-1. Repo als **Docker-Compose-Resource** anlegen (dieses Verzeichnis enthält
-   `docker-compose.yml`: `db` + einmaliges `migrate` + `web`).
+1. **Compose-Ressource** aus diesem Repo anlegen (enthält nur `db`).
    **Auto-Deploy bei Push ausschalten** — deployt wird erst, wenn der
    Actions-Workflow das Image fertig gepusht hat.
-2. Nach dem ersten Workflow-Lauf die beiden GHCR-Pakete (`akademie-web`,
-   `akademie-migrate`) auf **public** stellen (GitHub → Packages → Package
-   settings → Change visibility), sonst kann der Server sie nicht pullen.
-3. **Domain** auf den `web`-Service legen (Port 3000), HTTPS aktivieren.
-4. **Env-Variablen** in der Coolify-UI setzen (siehe `.env.example`):
-   `POSTGRES_PASSWORD`, `SESSION_SECRET`, `SITE_URL`, `ADMIN_EMAIL`,
-   `ADMIN_PASSWORD`. Wichtig: Coolify injiziert eine UI-Variable nur, wenn der
-   Service sie im `environment:`-Block referenziert — alle nötigen Variablen
-   sind dort bereits verdrahtet.
-5. Für automatisches Redeploy: in Coolify die **Deploy-Webhook-URL** der App
-   (Tab „Webhooks“) und ein **API-Token** (Keys & Tokens) erzeugen und als
-   GitHub-Repo-Secrets `COOLIFY_WEBHOOK` / `COOLIFY_TOKEN` hinterlegen.
-6. Nach jeder Env-Änderung **redeployen/neustarten** (Node liest `process.env`
-   nur beim Start).
+2. Nach dem ersten Workflow-Lauf das GHCR-Paket `akademie-web` auf **public**
+   stellen (GitHub → Packages → Package settings → Change visibility), sonst
+   kann der Server es nicht pullen.
+3. **Application** anlegen, Typ *Docker Image*,
+   `ghcr.io/christian-klng/akademie-web:latest`. Dabei:
+   - **Ports Exposes: 3000**, aber **kein** Port-Mapping auf den Host —
+     ein Host-Port schaltet Rolling Updates ab.
+   - **Healthcheck** auf `/api/health`.
+   - **Persistent Storage**: das Volume `media-data` nach `/data/media`.
+   - **Domain** setzen, HTTPS aktivieren.
+4. **Env-Variablen** setzen (siehe `.env.example`): bei der Application
+   `DATABASE_URL`, `SESSION_SECRET`, `SITE_URL`, `ADMIN_EMAIL`,
+   `ADMIN_PASSWORD`, SMTP, Stripe, Medien-Limits; bei der Compose-Ressource
+   `POSTGRES_PASSWORD`. Coolify injiziert eine UI-Variable in den
+   Compose-Stack nur, wenn der Service sie im `environment:`-Block
+   referenziert — dort ist alles Nötige verdrahtet.
+5. Für automatisches Redeploy: in Coolify die **Deploy-Webhook-URL** der
+   *Application* (Tab „Webhooks“) und ein **API-Token** (Keys & Tokens)
+   erzeugen und als GitHub-Repo-Secrets `COOLIFY_WEBHOOK` / `COOLIFY_TOKEN`
+   hinterlegen.
+6. Nach jeder Env-Änderung **redeployen** (Node liest `process.env` nur beim
+   Start).
 
 ### Hinweise
 
