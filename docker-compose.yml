@@ -31,9 +31,13 @@ services:
       # write the cluster OUTSIDE the volume (data loss on container recreate).
       - db-data:/var/lib/postgresql
     networks:
-      # Coolify's shared network — this is how the application container
-      # reaches the database. Without it the two resources can't see each other.
-      - coolify
+      coolify:
+        # A STABLE name for the application to connect to. Coolify names compose
+        # containers `db-<uuid>-<timestamp>` — that changes on every deploy, so
+        # a DATABASE_URL pointing at the container name would break on the next
+        # one. The alias survives container recreation.
+        aliases:
+          - akademie-db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-akademie}"]
       interval: 5s
