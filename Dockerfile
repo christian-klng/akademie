@@ -58,9 +58,15 @@ USER node
 EXPOSE 3000
 
 # node:24-slim carries neither curl nor wget (checked), so the probe runs in
-# Node. The generous start period covers the migration, which happens before the
-# server accepts anything and is slow on the production box.
-HEALTHCHECK --interval=10s --timeout=5s --start-period=180s --retries=3 \
+# Node.
+#
+# start-period MUST exceed the migration, which runs before the server answers
+# anything: while it is running the probe necessarily fails. On this server the
+# migration has taken up to 23 minutes, so 31 minutes it is — a shorter window
+# marks a perfectly healthy container unhealthy, Traefik never routes to it and
+# the domain answers "404 page not found". Docker flips the container to healthy
+# on the FIRST successful probe, so a fast migration is not slowed down by this.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=1860s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["./scripts/start.sh"]

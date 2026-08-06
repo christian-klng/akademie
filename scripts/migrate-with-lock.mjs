@@ -23,7 +23,12 @@ const LOCK_KEY = 823641907;
 
 const DB_WAIT_TIMEOUT_S = Number(process.env.DB_WAIT_TIMEOUT_S ?? 30);
 const LOCK_WAIT_TIMEOUT_S = Number(process.env.LOCK_WAIT_TIMEOUT_S ?? 600);
-const MIGRATE_TIMEOUT_S = Number(process.env.MIGRATE_TIMEOUT_S ?? 300);
+// 30 minutes, not 5: on the production box `drizzle-kit push` has taken
+// 14–23 minutes (2026-08-04/05) while locally it needs seconds. The limit
+// exists to stop an endless hang, not to enforce a pace — sizing it below
+// the observed runtime would abort every deploy. The real fix is versioned
+// SQL migrations, which would make this milliseconds.
+const MIGRATE_TIMEOUT_S = Number(process.env.MIGRATE_TIMEOUT_S ?? 1800);
 
 function log(message) {
   console.log(`[start] ${message}`);
